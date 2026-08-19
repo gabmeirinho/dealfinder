@@ -6,3 +6,4 @@ export type {
   PublicServerConfig,
   ServerConfig
 } from "./config.js";
+export type { Setting } from "./entities/setting.js";

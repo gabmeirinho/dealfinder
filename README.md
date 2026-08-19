@@ -6,7 +6,7 @@ is not part of the supported development workflow.
 
 ## Requirements
 
-- Node.js 22 or newer
+- Node.js 22.5 or newer (for the built-in `node:sqlite` module)
 - npm 10 or newer
 
 ## Install and verify
@@ -38,8 +38,23 @@ their integrations are configured. Configuration validation rejects malformed
 values with field-specific messages, and configuration views and structured
 logs redact tokens and API keys.
 
-The localhost application shell and persistence layer are added by later
-phase-one commits.
+SQLite data is migrated automatically when `openDatabase` opens a connection.
+The database uses foreign-key enforcement, WAL journaling for file-backed
+connections, atomic migration records, and UTC ISO-8601 text timestamps. The
+settings repository is only for non-sensitive preferences: credentials,
+Facebook sessions, and browser cookies must never be added to its schema.
+
+### Adding a migration
+
+Add a numbered migration under `packages/db/src/migrations/`, give it the next
+consecutive integer version, and append it to `allMigrations` in that folder's
+`index.ts`. Migrations run once in version order inside transactions. Never edit
+an applied migration; add the next migration instead. Tables should use
+snake_case names, explicit foreign keys and uniqueness constraints, and UTC
+ISO-8601 text timestamp columns. Add repository integration tests with the
+feature that owns each new table.
+
+The localhost application shell is added by the next phase-one commit.
 
 ## Local files
 
