@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
-import type { HealthResponse, ManagedVehicleSearch } from "@dealfinder/domain";
+import type {
+  BrowserStatus,
+  HealthResponse,
+  ManagedVehicleSearch
+} from "@dealfinder/domain";
 
+import { BrowserStatusPanel } from "./features/browser/BrowserStatusPanel.js";
 import { SearchDashboard } from "./features/searches/SearchDashboard.js";
 import { fetchHealth } from "./health.js";
+import type { BrowserApiClient } from "./lib/api/browser.js";
 import type { SearchApiClient } from "./lib/api/searches.js";
 
 export const appName = "Dealfinder" as const;
@@ -18,13 +24,17 @@ export interface AppProps {
   initialHealth?: HealthState;
   searchesClient?: SearchApiClient;
   initialSearches?: readonly ManagedVehicleSearch[];
+  browserClient?: BrowserApiClient;
+  initialBrowserStatus?: BrowserStatus;
 }
 
 export function App({
   healthClient = fetchHealth,
   initialHealth,
   searchesClient,
-  initialSearches
+  initialSearches,
+  browserClient,
+  initialBrowserStatus
 }: AppProps = {}): ReactElement {
   const [healthState, setHealthState] = useState<HealthState>(
     initialHealth ?? { phase: "loading" }
@@ -67,6 +77,10 @@ export function App({
 
       <main id="searches" className="workspace search-workspace">
         <HealthRail state={healthState} onRetry={() => void refreshHealth()} />
+        <BrowserStatusPanel
+          {...(browserClient === undefined ? {} : { client: browserClient })}
+          {...(initialBrowserStatus === undefined ? {} : { initialStatus: initialBrowserStatus })}
+        />
         <SearchDashboard
           {...(searchesClient === undefined ? {} : { client: searchesClient })}
           {...(initialSearches === undefined ? {} : { initialSearches })}

@@ -6,10 +6,12 @@ import { extname, resolve, sep } from "node:path";
 import type { DatabaseConnection } from "@dealfinder/db";
 import type { HealthResponse } from "@dealfinder/domain";
 
+import { handleBrowserRequest, type BrowserManager } from "../modules/browser/index.js";
 import { handleSearchesRequest } from "../modules/searches/index.js";
 
 export interface HttpServerOptions {
   database: () => DatabaseConnection;
+  browser?: () => BrowserManager;
   staticDirectory?: string;
   now?: () => Date;
 }
@@ -57,6 +59,11 @@ export function createHttpServer(options: HttpServerOptions): Server {
         sendHealth(response, options.database, now);
         return;
       }
+
+      if (
+        options.browser !== undefined &&
+        await handleBrowserRequest(request, response, url, { browser: options.browser })
+      ) return;
 
       if (await handleSearchesRequest(request, response, url, {
         database: options.database,

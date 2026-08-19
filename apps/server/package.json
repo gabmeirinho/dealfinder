@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@dealfinder/db": "0.1.0",
-    "@dealfinder/domain": "0.1.0"
+    "@dealfinder/domain": "0.1.0",
+    "playwright": "^1.62.1"
   }
 }

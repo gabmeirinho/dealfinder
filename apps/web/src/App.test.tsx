@@ -13,8 +13,32 @@ describe("dashboard shell", () => {
     expect(markup).toContain("Searches");
     expect(markup).toContain("Inbox");
     expect(markup).toContain("Checking system");
+    expect(markup).toContain("Facebook browser");
+    expect(markup).toContain("Checking browser");
     expect(markup).toContain("Saved searches");
     expect(markup).toContain("Set your first search");
+  });
+
+  it("renders the persistent browser boundary and manual-login guidance", () => {
+    const markup = renderToStaticMarkup(
+      <App
+        initialHealth={{ phase: "loading" }}
+        initialSearches={[]}
+        initialBrowserStatus={{
+          state: "stopped",
+          attentionReason: null,
+          attentionDetail: null,
+          changedAt: "2026-01-01T00:00:00.000Z",
+          profilePersistent: true,
+          controlledTabs: 0
+        }}
+      />
+    );
+
+    expect(markup).toContain("Open browser");
+    expect(markup).toContain("Profile");
+    expect(markup).toContain("Persistent");
+    expect(markup).toContain("never asks for or stores your password");
   });
 
   it("renders database health from the API contract", () => {

@@ -15,6 +15,7 @@ From the repository root:
 
 ```sh
 npm ci
+npm run browser:install
 npm run typecheck
 npm test
 npm run build
@@ -54,6 +55,12 @@ present. Its defaults use `127.0.0.1`, the `Europe/Lisbon` timezone, and a data
 directory at `~/.local/share/dealfinder`. SQLite, Chromium state, diagnostics,
 and backups are derived beneath that directory. Set
 `DEALFINDER_DATA_DIR` to move the complete local runtime area.
+
+`npm run browser:install` installs the Chromium build used for the visible,
+manually authenticated Facebook session. The dashboard opens and stops that
+browser explicitly; it never launches headless, imports an account, or stores a
+Facebook password. Browser session data remains in the dedicated profile under
+the configured data directory so a manual login can be reused after restart.
 
 The Telegram and DeepSeek credentials are optional and may remain unset until
 their integrations are configured. Configuration validation rejects malformed

@@ -10,14 +10,21 @@ import {
   type BoundAddress
 } from "./http.js";
 import { LifecycleRuntime } from "./lifecycle.js";
+import {
+  BrowserManager,
+  PlaywrightBrowserAdapter,
+  type BrowserAdapter
+} from "../modules/browser/index.js";
 
 export interface ApplicationOptions {
   config: ServerConfig;
   staticDirectory?: string;
+  browserAdapter?: BrowserAdapter;
 }
 
 export interface ApplicationRuntime {
   readonly database: DatabaseConnection | undefined;
+  readonly browser: BrowserManager;
   readonly server: Server;
   readonly address: BoundAddress | undefined;
   start(): Promise<BoundAddress>;
@@ -33,8 +40,13 @@ export function createApplicationRuntime(
     if (database === undefined) throw new Error("Database is not running");
     return database;
   };
+  const browser = new BrowserManager({
+    adapter: options.browserAdapter ?? new PlaywrightBrowserAdapter(),
+    profileDirectory: options.config.paths.chromiumProfileDir
+  });
   const server = createHttpServer({
     database: getDatabase,
+    browser: () => browser,
     ...(options.staticDirectory === undefined
       ? {}
       : { staticDirectory: options.staticDirectory })
@@ -49,6 +61,11 @@ export function createApplicationRuntime(
         database?.close();
         database = undefined;
       }
+    },
+    {
+      name: "browser",
+      start: () => undefined,
+      stop: () => browser.shutdown()
     },
     {
       name: "http",
@@ -66,6 +83,7 @@ export function createApplicationRuntime(
     get database() {
       return database;
     },
+    browser,
     server,
     get address() {
       return address;
