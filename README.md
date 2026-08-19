@@ -27,13 +27,22 @@ The workspace is intentionally split into four independently buildable areas:
 - `packages/domain` — shared domain types and behavior
 - `packages/db` — local persistence implementation
 
-At this scaffold stage, these packages contain only their compileable entry
-points and placeholder tests. Later commits add configuration, persistence, and
-the localhost application shell.
+The server configuration is loaded from `.env.local` when that ignored file is
+present. Its defaults use `127.0.0.1`, the `Europe/Lisbon` timezone, and a data
+directory at `~/.local/share/dealfinder`. SQLite, Chromium state, diagnostics,
+and backups are derived beneath that directory. Set
+`DEALFINDER_DATA_DIR` to move the complete local runtime area.
+
+The Telegram and DeepSeek credentials are optional and may remain unset until
+their integrations are configured. Configuration validation rejects malformed
+values with field-specific messages, and configuration views and structured
+logs redact tokens and API keys.
+
+The localhost application shell and persistence layer are added by later
+phase-one commits.
 
 ## Local files
 
 Copy `.env.example` to `.env.local` when local configuration is needed. Keep
 credentials out of tracked files. Runtime data, browser profiles, screenshots,
 backups, and build output are ignored by Git.
-

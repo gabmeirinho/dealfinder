@@ -6,6 +6,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@dealfinder/domain": "0.1.0"
   }
 }
-
