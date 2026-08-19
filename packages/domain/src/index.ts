@@ -8,3 +8,4 @@ export type {
 } from "./config.js";
 export type { Setting } from "./entities/setting.js";
 export type { HealthResponse, ServiceHealth } from "./health.js";
+export * from "./searches/index.js";

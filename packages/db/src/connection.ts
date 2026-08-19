@@ -6,6 +6,7 @@ import { runMigrations, type MigrationResult } from "./migration-runner.js";
 import { allMigrations } from "./migrations/index.js";
 import type { Migration } from "./migrations/types.js";
 import { SettingsRepository } from "./repositories/settings-repository.js";
+import { SearchesRepository } from "./repositories/searches.js";
 import { withTransaction } from "./transactions.js";
 
 export interface OpenDatabaseOptions {
@@ -19,6 +20,7 @@ export interface DatabaseConnection {
   readonly filename: string;
   readonly migrationResult: MigrationResult;
   readonly settings: SettingsRepository;
+  readonly searches: SearchesRepository;
   transaction<T>(operation: () => T): T;
   close(): void;
 }
@@ -53,6 +55,7 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseConnection {
       now
     );
     const settings = new SettingsRepository(database, now);
+    const searches = new SearchesRepository(database, now);
     let closed = false;
 
     return {
@@ -60,6 +63,7 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseConnection {
       filename,
       migrationResult,
       settings,
+      searches,
       transaction: <T>(operation: () => T) => withTransaction(database, operation),
       close: () => {
         if (closed) return;

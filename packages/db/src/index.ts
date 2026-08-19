@@ -13,4 +13,5 @@ export type { Migration } from "./migrations/types.js";
 export { runMigrations } from "./migration-runner.js";
 export type { MigrationResult } from "./migration-runner.js";
 export { SettingsRepository } from "./repositories/settings-repository.js";
+export { SearchesRepository } from "./repositories/searches.js";
 export { withTransaction } from "./transactions.js";
