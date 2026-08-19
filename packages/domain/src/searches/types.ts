@@ -2,6 +2,7 @@ export const SEARCH_CURRENCY = "EUR" as const;
 export const SEARCH_DISTANCE_UNIT = "km" as const;
 export const SEARCH_POWER_UNIT = "hp" as const;
 export const SEARCH_TIMEZONE = "Europe/Lisbon" as const;
+export const ACTIVE_SEARCH_SOFT_LIMIT = 10 as const;
 
 export const SEARCH_RADIUS_OPTIONS_KM = [25, 50, 100, 150, 250, 500] as const;
 
@@ -81,6 +82,18 @@ export interface VehicleSearch extends ValidatedVehicleSearchDraft {
   id: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type SearchSourceVerificationState = "unverified" | "verified" | "stale";
+
+/** API-facing search state reserved for the scanner and source adapters added in phase 3. */
+export interface ManagedVehicleSearch extends VehicleSearch {
+  lastScanAt: string | null;
+  nextScanAt: string | null;
+  sourceVerification: {
+    state: SearchSourceVerificationState;
+    verifiedAt: string | null;
+  };
 }
 
 export interface SearchValidationIssue {

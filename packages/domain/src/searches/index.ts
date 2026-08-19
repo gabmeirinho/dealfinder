@@ -5,6 +5,7 @@ export {
   createVehicleSearchDraft
 } from "./defaults.js";
 export {
+  ACTIVE_SEARCH_SOFT_LIMIT,
   SEARCH_CURRENCY,
   SEARCH_DISTANCE_UNIT,
   SEARCH_POWER_UNIT,
@@ -15,6 +16,7 @@ export type {
   ConstraintStrength,
   FuelType,
   NationwideSearchLocation,
+  ManagedVehicleSearch,
   RadiusSearchLocation,
   SearchConstraint,
   SearchLocation,
@@ -23,6 +25,7 @@ export type {
   SearchRadiusKm,
   SearchValidationIssue,
   SearchValidationResult,
+  SearchSourceVerificationState,
   SellerType,
   TransmissionType,
   ValidatedVehicleSearchDraft,

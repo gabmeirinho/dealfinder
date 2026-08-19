@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { openDatabase } from "@dealfinder/db";
+import { LATEST_SCHEMA_VERSION, openDatabase } from "@dealfinder/db";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -32,7 +32,7 @@ describe("localhost HTTP server", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       status: "ok",
-      database: { status: "ok", schemaVersion: 1 },
+      database: { status: "ok", schemaVersion: LATEST_SCHEMA_VERSION },
       timestamp: "2026-01-01T00:00:00.000Z"
     });
   });

@@ -6,6 +6,8 @@ import { extname, resolve, sep } from "node:path";
 import type { DatabaseConnection } from "@dealfinder/db";
 import type { HealthResponse } from "@dealfinder/domain";
 
+import { handleSearchesRequest } from "../modules/searches/index.js";
+
 export interface HttpServerOptions {
   database: () => DatabaseConnection;
   staticDirectory?: string;
@@ -55,6 +57,11 @@ export function createHttpServer(options: HttpServerOptions): Server {
         sendHealth(response, options.database, now);
         return;
       }
+
+      if (await handleSearchesRequest(request, response, url, {
+        database: options.database,
+        now
+      })) return;
 
       if ((method === "GET" || method === "HEAD") && staticDirectory !== undefined) {
         if (await serveStatic(response, method, url.pathname, staticDirectory)) return;

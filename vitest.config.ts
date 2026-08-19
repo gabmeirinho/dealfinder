@@ -6,6 +6,9 @@ export default defineConfig({
     alias: {
       "@dealfinder/domain": fileURLToPath(
         new URL("./packages/domain/src/index.ts", import.meta.url)
+      ),
+      "@dealfinder/db": fileURLToPath(
+        new URL("./packages/db/src/index.ts", import.meta.url)
       )
     }
   },
