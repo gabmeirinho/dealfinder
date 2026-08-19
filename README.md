@@ -20,6 +20,28 @@ npm test
 npm run build
 ```
 
+## Run locally
+
+Start the API, background runtime, and development dashboard together:
+
+```sh
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. The dashboard proxies API requests to the server
+at `http://127.0.0.1:3000`. Both listeners use loopback addresses only. Stop the
+command with Ctrl+C; the server closes HTTP work before closing SQLite.
+
+To exercise the production path, build once and start the server:
+
+```sh
+npm run build
+npm start
+```
+
+Open `http://127.0.0.1:3000`. In this mode the server serves the built React
+dashboard itself. `GET /api/health` reports server and database readiness.
+
 The workspace is intentionally split into four independently buildable areas:
 
 - `apps/server` — server and background runtime
@@ -54,7 +76,9 @@ snake_case names, explicit foreign keys and uniqueness constraints, and UTC
 ISO-8601 text timestamp columns. Add repository integration tests with the
 feature that owns each new table.
 
-The localhost application shell is added by the next phase-one commit.
+The application shell is intentionally minimal until collection features are
+added. Runtime services use a shared ordered lifecycle so later background
+workers can start and stop cleanly with the HTTP server and database.
 
 ## Local files
 

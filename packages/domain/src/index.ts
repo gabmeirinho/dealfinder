@@ -7,3 +7,4 @@ export type {
   ServerConfig
 } from "./config.js";
 export type { Setting } from "./entities/setting.js";
+export type { HealthResponse, ServiceHealth } from "./health.js";
