@@ -6,14 +6,15 @@ import { App } from "./App.js";
 describe("dashboard shell", () => {
   it("renders English navigation and loading health state", () => {
     const markup = renderToStaticMarkup(
-      <App initialHealth={{ phase: "loading" }} />
+      <App initialHealth={{ phase: "loading" }} initialSearches={[]} />
     );
 
     expect(markup).toContain("Dealfinder");
-    expect(markup).toContain("Overview");
-    expect(markup).toContain("Collection");
+    expect(markup).toContain("Searches");
+    expect(markup).toContain("Inbox");
     expect(markup).toContain("Checking system");
-    expect(markup).toContain("No deals collected yet");
+    expect(markup).toContain("Saved searches");
+    expect(markup).toContain("Set your first search");
   });
 
   it("renders database health from the API contract", () => {

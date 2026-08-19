@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
-import type { HealthResponse } from "@dealfinder/domain";
+import type { HealthResponse, ManagedVehicleSearch } from "@dealfinder/domain";
 
+import { SearchDashboard } from "./features/searches/SearchDashboard.js";
 import { fetchHealth } from "./health.js";
+import type { SearchApiClient } from "./lib/api/searches.js";
 
 export const appName = "Dealfinder" as const;
 
@@ -14,11 +16,15 @@ export type HealthState =
 export interface AppProps {
   healthClient?: () => Promise<HealthResponse>;
   initialHealth?: HealthState;
+  searchesClient?: SearchApiClient;
+  initialSearches?: readonly ManagedVehicleSearch[];
 }
 
 export function App({
   healthClient = fetchHealth,
-  initialHealth
+  initialHealth,
+  searchesClient,
+  initialSearches
 }: AppProps = {}): ReactElement {
   const [healthState, setHealthState] = useState<HealthState>(
     initialHealth ?? { phase: "loading" }
@@ -42,7 +48,7 @@ export function App({
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="wordmark" href="#overview" aria-label="Dealfinder overview">
+        <a className="wordmark" href="#searches" aria-label="Dealfinder saved searches">
           <span className="wordmark-mark" aria-hidden="true">df</span>
           <span>{appName}</span>
         </a>
@@ -51,49 +57,20 @@ export function App({
 
       <aside className="sidebar" aria-label="Primary navigation">
         <nav>
-          <a href="#overview" aria-current="page">Overview</a>
-          <a href="#collection">Collection</a>
-          <a href="#sources">Sources</a>
-          <a href="#activity">Activity</a>
+          <a href="#searches" aria-current="page">Searches</a>
+          <span className="nav-disabled" aria-disabled="true">Inbox</span>
+          <span className="nav-disabled" aria-disabled="true">Sources</span>
+          <span className="nav-disabled" aria-disabled="true">Activity</span>
         </nav>
         <p className="sidebar-note">Local-first<br />Europe/Lisbon</p>
       </aside>
 
-      <main id="overview" className="workspace">
-        <section className="intro" aria-labelledby="page-title">
-          <p className="eyebrow">Review desk / foundation</p>
-          <h1 id="page-title">A clear place for<br />the deals worth keeping.</h1>
-          <p className="intro-copy">
-            The local workspace is running. Collection and review tools will
-            arrive here as each source is connected.
-          </p>
-        </section>
-
+      <main id="searches" className="workspace search-workspace">
         <HealthRail state={healthState} onRetry={() => void refreshHealth()} />
-
-        <section id="collection" className="empty-panel" aria-labelledby="collection-title">
-          <div>
-            <p className="section-label">Collection queue</p>
-            <h2 id="collection-title">No deals collected yet</h2>
-          </div>
-          <p>
-            The workspace foundation is ready. Source setup and manual collection
-            controls are the next pieces to land.
-          </p>
-        </section>
-
-        <section className="foundation-grid" aria-label="Workspace foundation">
-          <article id="sources">
-            <p className="section-label">Data boundary</p>
-            <h2>Stays on this machine</h2>
-            <p>Preferences and deal data use the local SQLite store.</p>
-          </article>
-          <article id="activity">
-            <p className="section-label">Runtime</p>
-            <h2>Ready for background work</h2>
-            <p>Services share one ordered startup and shutdown lifecycle.</p>
-          </article>
-        </section>
+        <SearchDashboard
+          {...(searchesClient === undefined ? {} : { client: searchesClient })}
+          {...(initialSearches === undefined ? {} : { initialSearches })}
+        />
       </main>
     </div>
   );
@@ -113,13 +90,8 @@ function HealthRail({ state, onRetry }: HealthRailProps): ReactElement {
       : "Needs attention";
 
   return (
-    <aside className={`health-rail health-${state.phase}`} aria-live="polite">
-      <div className="rail-line" aria-hidden="true"><span /></div>
-      <div className="health-heading">
-        <p className="section-label">Live status</p>
-        <p className="health-status"><span aria-hidden="true" />{status}</p>
-      </div>
-
+    <aside className={`health-strip health-${state.phase}`} aria-live="polite" aria-label="Local system status">
+      <p className="health-status"><span aria-hidden="true" />{status}</p>
       <dl>
         <div>
           <dt>Server</dt>
@@ -135,12 +107,7 @@ function HealthRail({ state, onRetry }: HealthRailProps): ReactElement {
         </div>
       </dl>
 
-      {state.phase === "unavailable" ? (
-        <div className="health-error">
-          <p>{state.message}. Check that the local server is running.</p>
-          <button type="button" onClick={onRetry}>Check again</button>
-        </div>
-      ) : null}
+      {state.phase === "unavailable" ? <div className="health-error"><p>{state.message}. Check that the local server is running.</p><button type="button" onClick={onRetry}>Check again</button></div> : null}
     </aside>
   );
 }

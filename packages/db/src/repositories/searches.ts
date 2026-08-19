@@ -79,7 +79,7 @@ export class SearchesRepository {
         SELECT id, name, priority, is_active, criteria_json,
                location_mode, origin, radius_km, created_at, updated_at
         FROM searches
-        ORDER BY is_active DESC, priority ASC, created_at ASC, id ASC
+        ORDER BY priority ASC, created_at ASC, id ASC
       `)
       .all() as unknown as SearchRow[];
 
