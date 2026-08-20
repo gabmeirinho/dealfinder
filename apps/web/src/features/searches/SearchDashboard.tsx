@@ -5,8 +5,7 @@ import {
   useState,
   type FormEvent,
   type ReactElement,
-  type ReactNode,
-  type RefObject
+  type ReactNode
 } from "react";
 
 import {
@@ -15,10 +14,16 @@ import {
   type ConstraintStrength,
   type FuelType,
   type ManagedVehicleSearch,
+  type SearchVerificationPreview,
   type SearchRadiusKm,
   type TransmissionType
 } from "@dealfinder/domain";
 
+import {
+  searchVerificationApi,
+  type SearchVerificationApiClient
+} from "../../lib/api/search-verification.js";
+import { useModalFocus } from "../../lib/modal-focus.js";
 import {
   SearchApiError,
   searchApi,
@@ -30,10 +35,12 @@ import {
   searchFormToDraft,
   type SearchFormModel
 } from "./form-model.js";
+import { SearchVerificationDialog } from "./verification/SearchVerificationDialog.js";
 
 export interface SearchDashboardProps {
   client?: SearchApiClient;
   initialSearches?: readonly ManagedVehicleSearch[];
+  verificationClient?: SearchVerificationApiClient;
 }
 
 export interface EditorState {
@@ -68,7 +75,8 @@ const TRANSMISSION_OPTIONS: readonly { value: TransmissionType; label: string }[
 
 export function SearchDashboard({
   client = searchApi,
-  initialSearches
+  initialSearches,
+  verificationClient = searchVerificationApi
 }: SearchDashboardProps): ReactElement {
   const [searches, setSearches] = useState<ManagedVehicleSearch[]>(
     initialSearches === undefined ? [] : [...initialSearches]
@@ -79,6 +87,11 @@ export function SearchDashboard({
   const [pending, setPending] = useState(false);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null);
+  const [verification, setVerification] = useState<{
+    search: ManagedVehicleSearch;
+    preview: SearchVerificationPreview;
+  } | null>(null);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
 
   const loadSearches = useCallback(async () => {
     setLoading(true);
@@ -107,7 +120,7 @@ export function SearchDashboard({
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [confirmation, editor, pending]);
 
-  const overlayOpen = editor !== null || confirmation !== null;
+  const overlayOpen = editor !== null || confirmation !== null || verification !== null;
   useEffect(() => {
     if (!overlayOpen) return;
     const previousOverflow = document.body.style.overflow;
@@ -281,6 +294,59 @@ export function SearchDashboard({
     }
   };
 
+  const openVerification = async (search: ManagedVehicleSearch): Promise<void> => {
+    setPending(true);
+    setError(null);
+    setNotice(null);
+    setVerificationError(null);
+    try {
+      const preview = await verificationClient.openFacebook(search.id);
+      setVerification({ search, preview });
+    } catch (openError: unknown) {
+      setError(messageFor(
+        openError,
+        "Facebook verification could not start. Open the controlled browser and try again."
+      ));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const confirmVerification = async (): Promise<void> => {
+    if (verification === null) return;
+    setPending(true);
+    setVerificationError(null);
+    try {
+      await verificationClient.confirmFacebook(verification.search.id);
+      setVerification(null);
+      await loadSearches();
+      setNotice(`${verification.search.name} verified for Facebook Marketplace.`);
+    } catch (confirmError: unknown) {
+      setVerificationError(messageFor(
+        confirmError,
+        "Keep Chromium on the intended Marketplace results and try confirming again."
+      ));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const rejectVerification = async (): Promise<void> => {
+    if (verification === null) return;
+    setPending(true);
+    setVerificationError(null);
+    try {
+      await verificationClient.rejectFacebook(verification.search.id);
+      const searchName = verification.search.name;
+      setVerification(null);
+      setNotice(`${searchName} verification rejected. Nothing was saved.`);
+    } catch (rejectError: unknown) {
+      setVerificationError(messageFor(rejectError, "Verification could not be rejected."));
+    } finally {
+      setPending(false);
+    }
+  };
+
   return (
     <section className="search-manager" aria-labelledby="searches-title">
       <div className="search-heading">
@@ -341,6 +407,7 @@ export function SearchDashboard({
               onToggle={() => void toggleActive(search)}
               onDelete={() => confirmDelete(search)}
               onScan={() => void requestScan(search)}
+              onVerify={() => void openVerification(search)}
               onMove={(direction) => void moveSearch(index, direction)}
             />
           ))}
@@ -369,6 +436,17 @@ export function SearchDashboard({
           onCancel={() => setConfirmation(null)}
         />
       )}
+
+      {verification === null ? null : (
+        <SearchVerificationDialog
+          search={verification.search}
+          preview={verification.preview}
+          pending={pending}
+          error={verificationError}
+          onConfirm={() => void confirmVerification()}
+          onReject={() => void rejectVerification()}
+        />
+      )}
     </section>
   );
 }
@@ -384,6 +462,7 @@ interface SearchRowProps {
   onToggle(): void;
   onDelete(): void;
   onScan(): void;
+  onVerify(): void;
   onMove(direction: -1 | 1): void;
 }
 
@@ -439,6 +518,9 @@ function SearchRow(props: SearchRowProps): ReactElement {
       <div className="row-actions">
         <button className="row-action-primary" type="button" onClick={props.onEdit} disabled={props.pending}>
           <Icon name="edit" /> Edit
+        </button>
+        <button className="source-action" type="button" onClick={props.onVerify} disabled={props.pending}>
+          <Icon name="verify" /> {search.sourceVerification.state === "unverified" ? "Verify Facebook" : "Verify again"}
         </button>
         <button type="button" onClick={props.onScan} disabled={props.pending || !search.active} title={search.active ? "Request manual scan" : "Activate this search before scanning"}>
           <Icon name="scan" /> Scan
@@ -688,12 +770,13 @@ function ConfirmationDialog({ confirmation, pending, onCancel }: { confirmation:
   );
 }
 
-function Icon({ name }: { name: "plus" | "up" | "down" | "edit" | "scan" | "pause" | "play" | "copy" | "trash" | "close" | "alert" }): ReactElement {
+function Icon({ name }: { name: "plus" | "up" | "down" | "edit" | "verify" | "scan" | "pause" | "play" | "copy" | "trash" | "close" | "alert" }): ReactElement {
   const paths: Record<typeof name, ReactNode> = {
     plus: <><path d="M12 5v14M5 12h14" /></>,
     up: <><path d="m7 14 5-5 5 5" /></>,
     down: <><path d="m7 10 5 5 5-5" /></>,
     edit: <><path d="m14.5 5.5 4 4L9 19H5v-4Z" /><path d="m12.5 7.5 4 4" /></>,
+    verify: <><rect x="3" y="5" width="18" height="14" /><path d="M3 9h18M8 14l2.5 2.5L16 11" /></>,
     scan: <><path d="M8 5H5v3M16 5h3v3M8 19H5v-3M16 19h3v-3" /><path d="M7 12h10" /></>,
     pause: <><path d="M9 7v10M15 7v10" /></>,
     play: <><path d="m9 7 8 5-8 5Z" /></>,
@@ -779,50 +862,4 @@ function countStrength(search: ManagedVehicleSearch, strength: ConstraintStrengt
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-GB").format(value);
-}
-
-function useModalFocus(
-  containerRef: RefObject<HTMLElement | null>,
-  active: boolean
-): void {
-  useEffect(() => {
-    if (!active) return;
-    const container = containerRef.current;
-    if (container === null) return;
-    const previouslyFocused = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
-    const focusable = getFocusable(container);
-    const initial = container.querySelector<HTMLElement>("[data-initial-focus]") ?? focusable[0];
-    initial?.focus();
-
-    const containFocus = (event: KeyboardEvent): void => {
-      if (event.key !== "Tab") return;
-      const controls = getFocusable(container);
-      const first = controls[0];
-      const last = controls.at(-1);
-      if (first === undefined || last === undefined) {
-        event.preventDefault();
-        return;
-      }
-      if (event.shiftKey && (document.activeElement === first || !container.contains(document.activeElement))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (document.activeElement === last || !container.contains(document.activeElement))) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", containFocus);
-    return () => {
-      document.removeEventListener("keydown", containFocus);
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
-    };
-  }, [active, containerRef]);
-}
-
-function getFocusable(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>(
-    "button:not(:disabled), input:not(:disabled), select:not(:disabled), [href], [tabindex]:not([tabindex='-1'])"
-  )).filter((element) => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true");
 }

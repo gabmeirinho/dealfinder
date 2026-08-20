@@ -14,4 +14,9 @@ export { runMigrations } from "./migration-runner.js";
 export type { MigrationResult } from "./migration-runner.js";
 export { SettingsRepository } from "./repositories/settings-repository.js";
 export { SearchesRepository } from "./repositories/searches.js";
+export { SearchSourcesRepository } from "./repositories/search-sources.js";
+export type {
+  SaveSearchSourceVerification,
+  SearchSourceVerification
+} from "./repositories/search-sources.js";
 export { withTransaction } from "./transactions.js";

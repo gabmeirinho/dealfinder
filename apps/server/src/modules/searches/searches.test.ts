@@ -12,6 +12,7 @@ import {
   createHttpServer,
   listenHttpServer
 } from "../../app/http.js";
+import { fingerprintSearchCriteria } from "../search-verification/fingerprint.js";
 
 describe("saved-search management API", () => {
   let database: DatabaseConnection;
@@ -105,6 +106,43 @@ describe("saved-search management API", () => {
       }
     });
     expect(database.searches.get(created.id)?.criteria.priceRange).toBeNull();
+  });
+
+  it("keeps non-criteria edits verified and marks changed criteria stale", async () => {
+    const originalDraft = searchDraft("Verified Golf");
+    const created = database.searches.create(originalDraft);
+    database.searchSources.saveVerification({
+      searchId: created.id,
+      source: "facebook",
+      sourceUrl: "https://www.facebook.com/marketplace/category/vehicles/?query=Golf",
+      criteriaFingerprint: fingerprintSearchCriteria(created),
+      verifiedAt: "2026-08-19T12:15:00.000Z"
+    });
+
+    const renamed = { ...originalDraft, name: "Renamed Golf", active: false };
+    const renameResponse = await api(`/api/searches/${created.id}`, {
+      method: "PUT",
+      body: JSON.stringify(renamed)
+    });
+    expect(await json(renameResponse)).toMatchObject({
+      search: { sourceVerification: { state: "verified" } }
+    });
+
+    const changed = searchDraft("Renamed Golf");
+    changed.active = false;
+    changed.criteria.maximumMileageKm = { value: 90_000, strength: "hard" };
+    const changedResponse = await api(`/api/searches/${created.id}`, {
+      method: "PUT",
+      body: JSON.stringify(changed)
+    });
+    expect(await json(changedResponse)).toMatchObject({
+      search: {
+        sourceVerification: {
+          state: "stale",
+          verifiedAt: "2026-08-19T12:15:00.000Z"
+        }
+      }
+    });
   });
 
   it("duplicates a resolved search in a paused state", async () => {

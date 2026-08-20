@@ -6,11 +6,21 @@ import { BrowserCommandError, BrowserManager } from "./manager.js";
 class FakeBrowserSession implements BrowserSession {
   public readonly controlledTabs = 1 as const;
   public closed = false;
+  public url = "about:blank";
   readonly #listeners = new Set<() => void>();
 
   public async close(): Promise<void> {
     this.closed = true;
     for (const listener of this.#listeners) listener();
+  }
+
+  public async navigate(url: string): Promise<string> {
+    this.url = url;
+    return url;
+  }
+
+  public currentUrl(): string {
+    return this.url;
   }
 
   public onClosed(listener: () => void): () => void {

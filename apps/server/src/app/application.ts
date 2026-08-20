@@ -15,6 +15,7 @@ import {
   PlaywrightBrowserAdapter,
   type BrowserAdapter
 } from "../modules/browser/index.js";
+import { SearchVerificationService } from "../modules/search-verification/index.js";
 
 export interface ApplicationOptions {
   config: ServerConfig;
@@ -44,9 +45,14 @@ export function createApplicationRuntime(
     adapter: options.browserAdapter ?? new PlaywrightBrowserAdapter(),
     profileDirectory: options.config.paths.chromiumProfileDir
   });
+  const searchVerification = new SearchVerificationService({
+    database: getDatabase,
+    browser: () => browser
+  });
   const server = createHttpServer({
     database: getDatabase,
     browser: () => browser,
+    searchVerification: () => searchVerification,
     ...(options.staticDirectory === undefined
       ? {}
       : { staticDirectory: options.staticDirectory })

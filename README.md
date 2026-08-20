@@ -62,6 +62,14 @@ browser explicitly; it never launches headless, imports an account, or stores a
 Facebook password. Browser session data remains in the dedicated profile under
 the configured data directory so a manual login can be reused after restart.
 
+To verify a saved search, open the controlled browser and choose **Verify
+Facebook** on that search. DealFinder opens a generated Marketplace vehicle
+search and lists criteria that will be checked locally. Confirm only while the
+visible tab shows the intended results; the current Marketplace URL and
+verification time are then saved automatically. Editing criteria or location
+marks that verification stale, while renaming, pausing, or reprioritizing does
+not. The dashboard never accepts a pasted listing or search URL.
+
 The Telegram and DeepSeek credentials are optional and may remain unset until
 their integrations are configured. Configuration validation rejects malformed
 values with field-specific messages, and configuration views and structured

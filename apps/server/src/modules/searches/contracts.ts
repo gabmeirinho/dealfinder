@@ -3,6 +3,9 @@ import type {
   SearchValidationIssue,
   VehicleSearch
 } from "@dealfinder/domain";
+import type { SearchSourceVerification } from "@dealfinder/db";
+
+import { fingerprintSearchCriteria } from "../search-verification/fingerprint.js";
 
 export interface SearchResponse {
   search: ManagedVehicleSearch;
@@ -27,14 +30,22 @@ export interface SearchApiErrorResponse {
   };
 }
 
-export function presentSearch(search: VehicleSearch): ManagedVehicleSearch {
+export function presentSearch(
+  search: VehicleSearch,
+  verification?: SearchSourceVerification
+): ManagedVehicleSearch {
+  const verificationState = verification === undefined
+    ? "unverified"
+    : verification.criteriaFingerprint === fingerprintSearchCriteria(search)
+      ? "verified"
+      : "stale";
   return {
     ...search,
     lastScanAt: null,
     nextScanAt: null,
     sourceVerification: {
-      state: "unverified",
-      verifiedAt: null
+      state: verificationState,
+      verifiedAt: verification?.verifiedAt ?? null
     }
   };
 }

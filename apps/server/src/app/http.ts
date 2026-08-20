@@ -7,11 +7,16 @@ import type { DatabaseConnection } from "@dealfinder/db";
 import type { HealthResponse } from "@dealfinder/domain";
 
 import { handleBrowserRequest, type BrowserManager } from "../modules/browser/index.js";
+import {
+  handleSearchVerificationRequest,
+  type SearchVerificationService
+} from "../modules/search-verification/index.js";
 import { handleSearchesRequest } from "../modules/searches/index.js";
 
 export interface HttpServerOptions {
   database: () => DatabaseConnection;
   browser?: () => BrowserManager;
+  searchVerification?: () => SearchVerificationService;
   staticDirectory?: string;
   now?: () => Date;
 }
@@ -63,6 +68,13 @@ export function createHttpServer(options: HttpServerOptions): Server {
       if (
         options.browser !== undefined &&
         await handleBrowserRequest(request, response, url, { browser: options.browser })
+      ) return;
+
+      if (
+        options.searchVerification !== undefined &&
+        await handleSearchVerificationRequest(request, response, url, {
+          verification: options.searchVerification
+        })
       ) return;
 
       if (await handleSearchesRequest(request, response, url, {

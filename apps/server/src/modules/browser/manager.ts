@@ -85,6 +85,14 @@ export class BrowserManager {
     return this.getStatus();
   }
 
+  public async navigate(url: string): Promise<string> {
+    return await this.requireOpenSession().navigate(url);
+  }
+
+  public currentUrl(): string {
+    return this.requireOpenSession().currentUrl();
+  }
+
   public async pauseForAttention(
     reason: Exclude<BrowserAttentionReason, "browser_closed" | "launch_failed">,
     detail: string | null = null
@@ -138,6 +146,16 @@ export class BrowserManager {
     const session = this.#session;
     this.#session = undefined;
     return session;
+  }
+
+  private requireOpenSession(): BrowserSession {
+    if (this.#status.state !== "open" || this.#session === undefined) {
+      throw new BrowserCommandError(
+        "BROWSER_NOT_OPEN",
+        "Open the visible browser before verifying a Facebook search"
+      );
+    }
+    return this.#session;
   }
 
   private createStatus(

@@ -42,7 +42,10 @@ export async function handleSearchesRequest(
     if (segments.length === 2) {
       if (method === "GET") {
         const body: SearchListResponse = {
-          searches: database.searches.list().map(presentSearch)
+          searches: database.searches.list().map((search) => presentSearch(
+            search,
+            database.searchSources.get(search.id, "facebook")
+          ))
         };
         sendJson(response, 200, body);
         return true;
@@ -55,7 +58,7 @@ export async function handleSearchesRequest(
           requireActivationConfirmation(database, draft.active, overrideActiveLimit);
           return database.searches.create(draft);
         });
-        sendSearch(response, 201, search);
+        sendSearch(response, 201, search, database);
         return true;
       }
       throw methodNotAllowed("GET, POST");
@@ -66,7 +69,12 @@ export async function handleSearchesRequest(
       const payload = await readObjectBody(request);
       const searchIds = parseSearchIds(payload);
       const searches = database.transaction(() => reprioritize(database, searchIds));
-      const body: SearchListResponse = { searches: searches.map(presentSearch) };
+      const body: SearchListResponse = {
+        searches: searches.map((search) => presentSearch(
+          search,
+          database.searchSources.get(search.id, "facebook")
+        ))
+      };
       sendJson(response, 200, body);
       return true;
     }
@@ -74,7 +82,7 @@ export async function handleSearchesRequest(
     const id = parseSearchId(segments[2]);
     if (segments.length === 3) {
       if (method === "GET") {
-        sendSearch(response, 200, requireSearch(database, id));
+        sendSearch(response, 200, requireSearch(database, id), database);
         return true;
       }
       if (method === "PUT") {
@@ -90,7 +98,7 @@ export async function handleSearchesRequest(
           );
           return database.searches.update(id, draft) ?? missingSearch();
         });
-        sendSearch(response, 200, search);
+        sendSearch(response, 200, search, database);
         return true;
       }
       if (method === "DELETE") {
@@ -116,7 +124,7 @@ export async function handleSearchesRequest(
         name: duplicateName(source.name),
         active: false
       });
-      sendSearch(response, 201, duplicate);
+      sendSearch(response, 201, duplicate, database);
       return true;
     }
 
@@ -129,7 +137,7 @@ export async function handleSearchesRequest(
         requireActivationConfirmation(database, true, overrideActiveLimit);
         return database.searches.update(id, { ...toDraft(existing), active: true }) ?? missingSearch();
       });
-      sendSearch(response, 200, search);
+      sendSearch(response, 200, search, database);
       return true;
     }
 
@@ -139,7 +147,7 @@ export async function handleSearchesRequest(
         if (!existing.active) return existing;
         return database.searches.update(id, { ...toDraft(existing), active: false }) ?? missingSearch();
       });
-      sendSearch(response, 200, search);
+      sendSearch(response, 200, search, database);
       return true;
     }
 
@@ -463,8 +471,18 @@ function issue(issues: SearchValidationIssue[], path: string, message: string): 
   issues.push({ path, message });
 }
 
-function sendSearch(response: ServerResponse, statusCode: number, search: VehicleSearch): void {
-  const body: SearchResponse = { search: presentSearch(search) };
+function sendSearch(
+  response: ServerResponse,
+  statusCode: number,
+  search: VehicleSearch,
+  database: DatabaseConnection
+): void {
+  const body: SearchResponse = {
+    search: presentSearch(
+      search,
+      database.searchSources.get(search.id, "facebook")
+    )
+  };
   sendJson(response, statusCode, body);
 }
 

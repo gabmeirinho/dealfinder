@@ -44,6 +44,15 @@ class PlaywrightBrowserSession implements BrowserSession {
     await this.#context.close();
   }
 
+  public async navigate(url: string): Promise<string> {
+    await this.#controlledPage.goto(url, { waitUntil: "domcontentloaded" });
+    return this.#controlledPage.url();
+  }
+
+  public currentUrl(): string {
+    return this.#controlledPage.url();
+  }
+
   public onClosed(listener: () => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);

@@ -25,14 +25,15 @@ describe("database migrations", () => {
 
     expect(testDatabase.connection.migrationResult).toEqual({
       currentVersion: LATEST_SCHEMA_VERSION,
-      appliedVersions: [1, 2]
+      appliedVersions: [1, 2, 3]
     });
     const migrations = testDatabase.connection.database
       .prepare("SELECT version, name FROM schema_migrations ORDER BY version")
       .all() as unknown as MigrationRow[];
     expect(migrations).toEqual([
       { version: 1, name: "create_settings" },
-      { version: 2, name: "create_searches" }
+      { version: 2, name: "create_searches" },
+      { version: 3, name: "create_search_sources" }
     ]);
   });
 
