@@ -56,4 +56,9 @@ export type {
   NormalizationRuleProposal,
   RuleProposalStatus
 } from "./repositories/corrections.js";
+export { GeocodingRepository } from "./repositories/geocoding.js";
+export type {
+  CachedLocality,
+  StoredListingDistance
+} from "./repositories/geocoding.js";
 export { withTransaction } from "./transactions.js";

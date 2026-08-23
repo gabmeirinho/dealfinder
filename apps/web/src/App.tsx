@@ -16,6 +16,7 @@ import type { SearchApiClient } from "./lib/api/searches.js";
 import type { FacebookHealthApiClient } from "./lib/api/facebook-health.js";
 
 export const appName = "Dealfinder" as const;
+const distanceDisclosure = "Distances are approximate straight-line measurements between locality centroids, not routes or travel times. Locality data uses bundled offline Portuguese centroids.";
 
 export type HealthState =
   | { phase: "loading" }
@@ -79,7 +80,16 @@ export function App({
           <span className="nav-disabled" aria-disabled="true">Sources</span>
           <span className="nav-disabled" aria-disabled="true">Activity</span>
         </nav>
-        <p className="sidebar-note">Local-first<br />Europe/Lisbon</p>
+        <div className="sidebar-meta">
+          <p className="sidebar-note">Local-first<br />Europe/Lisbon</p>
+          <p
+            className="distance-attribution"
+            title={distanceDisclosure}
+          >
+            <strong>Distance</strong>
+            Approx. straight-line<br />No routes · offline PT centroids
+          </p>
+        </div>
       </aside>
 
       <main id="searches" className="workspace search-workspace">

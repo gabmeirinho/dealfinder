@@ -14,6 +14,7 @@ import { FacebookHealthRepository } from "./repositories/facebook-health.js";
 import { ListingsRepository } from "./repositories/listings.js";
 import { NormalizedVehiclesRepository } from "./repositories/normalized-vehicles.js";
 import { CorrectionsRepository } from "./repositories/corrections.js";
+import { GeocodingRepository } from "./repositories/geocoding.js";
 import { withTransaction } from "./transactions.js";
 
 export interface OpenDatabaseOptions {
@@ -35,6 +36,7 @@ export interface DatabaseConnection {
   readonly listings: ListingsRepository;
   readonly normalizedVehicles: NormalizedVehiclesRepository;
   readonly corrections: CorrectionsRepository;
+  readonly geocoding: GeocodingRepository;
   transaction<T>(operation: () => T): T;
   close(): void;
 }
@@ -77,6 +79,7 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseConnection {
     const listings = new ListingsRepository(database);
     const normalizedVehicles = new NormalizedVehiclesRepository(database);
     const corrections = new CorrectionsRepository(database);
+    const geocoding = new GeocodingRepository(database);
     let closed = false;
 
     return {
@@ -92,6 +95,7 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseConnection {
       listings,
       normalizedVehicles,
       corrections,
+      geocoding,
       transaction: <T>(operation: () => T) => withTransaction(database, operation),
       close: () => {
         if (closed) return;

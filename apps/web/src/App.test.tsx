@@ -18,6 +18,8 @@ describe("dashboard shell", () => {
     expect(markup).toContain("Facebook health");
     expect(markup).toContain("Saved searches");
     expect(markup).toContain("Set your first search");
+    expect(markup).toContain("Approx. straight-line");
+    expect(markup).toContain("No routes · offline PT centroids");
   });
 
   it("renders the persistent browser boundary and manual-login guidance", () => {

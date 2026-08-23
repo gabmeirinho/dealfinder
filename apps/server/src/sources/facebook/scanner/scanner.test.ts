@@ -31,6 +31,13 @@ describe("Facebook scanner", () => {
       initialScan: true,
       stopReason: "initial_limit"
     });
+    const first = setup.database.listings.getBySource("facebook", candidate(1).sourceListingId);
+    expect(setup.database.geocoding.getDistance(first?.id as number, setup.searchId)?.distance)
+      .toMatchObject({
+        status: "approximate",
+        method: "straight_line",
+        label: "≈ 0.0 km straight-line"
+      });
   });
 
   it("stops a monitoring scan after 50 consecutive known IDs", async () => {

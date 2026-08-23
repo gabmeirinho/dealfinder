@@ -92,6 +92,13 @@ scans retain at most 300 cards; later scans stop after 50 consecutive known
 listing IDs. Dashboard **Scan** requests enter this same durable queue, and the
 saved-search list reports persisted last/next scan times.
 
+Listing distance uses a bundled offline set of Portuguese locality centroids.
+Lookups make no network requests and therefore have no external rate limit;
+resolved and unknown localities are cached in SQLite. Values are labelled as
+approximate straight-line distance from the search origin, never as routes,
+driving distance, or travel time. Nationwide searches do not calculate a
+distance, and an unknown locality never excludes a listing.
+
 Facebook checkpoints, login and consent prompts, Marketplace restrictions,
 rate limits, empty or partial results, and unreviewed selector layouts fail
 closed. DealFinder commits no observations from that scan, records the affected

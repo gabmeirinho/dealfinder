@@ -16,3 +16,4 @@ export * from "./scanning/index.js";
 export * from "./listings/index.js";
 export * from "./normalization/index.js";
 export * from "./risk/index.js";
+export * from "./distance/index.js";

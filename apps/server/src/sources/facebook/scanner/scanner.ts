@@ -6,6 +6,10 @@ import {
 
 import type { MarketplaceResultSnapshot } from "../../../modules/browser/index.js";
 import { ListingIngestionService } from "../../../modules/listings/index.js";
+import {
+  GeocodingService,
+  type GeocodingProvider
+} from "../../../modules/geocoding/index.js";
 import { fingerprintSearchCriteria } from "../../../modules/search-verification/fingerprint.js";
 import {
   classifyFacebookPage,
@@ -44,6 +48,7 @@ export interface FacebookScannerOptions {
       snapshot: MarketplaceResultSnapshot
     ): Promise<{ id: string }>;
   };
+  geocodingProvider?: GeocodingProvider;
 }
 
 export class FacebookScanner {
@@ -51,12 +56,14 @@ export class FacebookScanner {
   readonly #browser: () => FacebookScanBrowser;
   readonly #now: () => Date;
   readonly #failures: FacebookScannerOptions["failures"];
+  readonly #geocodingProvider: GeocodingProvider | undefined;
 
   public constructor(options: FacebookScannerOptions) {
     this.#database = options.database;
     this.#browser = options.browser;
     this.#now = options.now ?? (() => new Date());
     this.#failures = options.failures;
+    this.#geocodingProvider = options.geocodingProvider;
   }
 
   public async scan(searchId: string): Promise<FacebookScanResult> {
@@ -168,20 +175,35 @@ export class FacebookScanner {
     }
   }
 
-  private commit(
+  private async commit(
     searchId: string,
     observedAt: string,
     candidates: readonly FacebookRawCandidate[],
     result: FacebookScanResult
-  ): FacebookScanResult {
+  ): Promise<FacebookScanResult> {
     const database = this.#database();
-    new ListingIngestionService(() => database).ingestScan({
+    const ingestion = new ListingIngestionService(() => database).ingestScan({
       searchId,
       observedAt,
       initialScan: result.initialScan,
       completeSnapshot: result.stopReason === "results_end",
       candidates
     });
+    const geocoding = new GeocodingService({
+      database: () => database,
+      ...(this.#geocodingProvider === undefined ? {} : { provider: this.#geocodingProvider })
+    });
+    const search = database.searches.get(searchId);
+    if (search === undefined) throw new Error(`Search not found after listing ingestion: ${searchId}`);
+    for (const [index, listing] of ingestion.listings.entries()) {
+      await geocoding.calculate({
+        listingId: listing.id,
+        searchId,
+        searchLocation: search.location,
+        listingLocality: candidates[index]?.location ?? null,
+        calculatedAt: observedAt
+      });
+    }
     return result;
   }
 
