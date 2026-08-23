@@ -17,6 +17,8 @@
     "build": "npm run build --workspaces --if-present",
     "browser:install": "playwright install chromium",
     "dev": "npm run build && concurrently --kill-others --names api,web \"node apps/server/dist/main.js\" \"npm run dev --workspace @dealfinder/web\"",
+    "fixtures:check": "node scripts/check-facebook-fixtures.mjs",
+    "fixtures:sanitize": "node scripts/sanitize-facebook-fixture.mjs",
     "start": "node apps/server/dist/main.js",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",

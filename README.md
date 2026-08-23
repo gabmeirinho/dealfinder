@@ -70,6 +70,20 @@ verification time are then saved automatically. Editing criteria or location
 marks that verification stale, while renaming, pausing, or reprioritizing does
 not. The dashboard never accepts a pasted listing or search URL.
 
+Marketplace parser fixtures use a small, versioned and privacy-reviewed card
+contract. To intentionally refresh one after capturing a result page, write to
+a new file rather than editing the capture in place:
+
+```sh
+npm run fixtures:sanitize -- /path/to/captured.html apps/server/test/fixtures/facebook/results-new.html
+```
+
+Review the inferred title, price, location, and facts; remove any seller or
+account information; then replace `reviewed: pending` in the provenance comment
+with the review date. `npm run fixtures:check` rejects pending reviews, scripts,
+forms, session/contact markers, profile links, and unapproved external URLs.
+Raw captures must remain outside the repository and be deleted after review.
+
 The Telegram and DeepSeek credentials are optional and may remain unset until
 their integrations are configured. Configuration validation rejects malformed
 values with field-specific messages, and configuration views and structured

@@ -19,4 +19,11 @@ export type {
   SaveSearchSourceVerification,
   SearchSourceVerification
 } from "./repositories/search-sources.js";
+export { RawCandidatesRepository } from "./repositories/raw-candidates.js";
+export type {
+  RawCandidate,
+  RawCandidateObservation,
+  SaveRawCandidateObservation,
+  SavedRawCandidateObservation
+} from "./repositories/raw-candidates.js";
 export { withTransaction } from "./transactions.js";

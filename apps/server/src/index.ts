@@ -25,3 +25,4 @@ export { createLogger } from "./logging/index.js";
 export * from "./modules/browser/index.js";
 export * from "./modules/search-verification/index.js";
 export * from "./modules/searches/index.js";
+export * from "./sources/facebook/parser/index.js";
