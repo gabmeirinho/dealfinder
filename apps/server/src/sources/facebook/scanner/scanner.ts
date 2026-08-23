@@ -49,6 +49,7 @@ export interface FacebookScannerOptions {
     ): Promise<{ id: string }>;
   };
   geocodingProvider?: GeocodingProvider;
+  processingWake?: () => void;
 }
 
 export class FacebookScanner {
@@ -57,6 +58,7 @@ export class FacebookScanner {
   readonly #now: () => Date;
   readonly #failures: FacebookScannerOptions["failures"];
   readonly #geocodingProvider: GeocodingProvider | undefined;
+  readonly #processingWake: (() => void) | undefined;
 
   public constructor(options: FacebookScannerOptions) {
     this.#database = options.database;
@@ -64,6 +66,7 @@ export class FacebookScanner {
     this.#now = options.now ?? (() => new Date());
     this.#failures = options.failures;
     this.#geocodingProvider = options.geocodingProvider;
+    this.#processingWake = options.processingWake;
   }
 
   public async scan(searchId: string): Promise<FacebookScanResult> {
@@ -189,6 +192,7 @@ export class FacebookScanner {
       completeSnapshot: result.stopReason === "results_end",
       candidates
     });
+    this.#processingWake?.();
     const geocoding = new GeocodingService({
       database: () => database,
       ...(this.#geocodingProvider === undefined ? {} : { provider: this.#geocodingProvider })

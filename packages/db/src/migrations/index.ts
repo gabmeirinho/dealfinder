@@ -7,6 +7,7 @@ import { createFacebookHealthMigration } from "./006-create-facebook-health.js";
 import { createListingLifecycleMigration } from "./007-create-listing-lifecycle.js";
 import { createNormalizedVehicleFactsMigration } from "./008-create-normalized-vehicle-facts.js";
 import { createGeocodingCacheMigration } from "./009-create-geocoding-cache.js";
+import { createEnrichmentProcessingMigration } from "./010-create-enrichment-processing.js";
 import type { Migration } from "./types.js";
 
 export const allMigrations: readonly Migration[] = [
@@ -18,7 +19,8 @@ export const allMigrations: readonly Migration[] = [
   createFacebookHealthMigration,
   createListingLifecycleMigration,
   createNormalizedVehicleFactsMigration,
-  createGeocodingCacheMigration
+  createGeocodingCacheMigration,
+  createEnrichmentProcessingMigration
 ];
 
 export const LATEST_SCHEMA_VERSION =

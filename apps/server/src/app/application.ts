@@ -21,17 +21,25 @@ import { DiagnosticsService } from "../modules/diagnostics/index.js";
 import { FacebookFailureCoordinator } from "../sources/facebook/failures/index.js";
 import { FacebookHealthService } from "../modules/facebook-health/index.js";
 import { FacebookScanner } from "../sources/facebook/scanner/index.js";
+import { createLogger, type Logger } from "../logging/index.js";
+import {
+  DeepSeekClient,
+  DeepSeekEnrichmentService,
+  DeepSeekEnrichmentWorker
+} from "../integrations/deepseek/index.js";
 
 export interface ApplicationOptions {
   config: ServerConfig;
   staticDirectory?: string;
   browserAdapter?: BrowserAdapter;
+  logger?: Logger;
 }
 
 export interface ApplicationRuntime {
   readonly database: DatabaseConnection | undefined;
   readonly browser: BrowserManager;
   readonly scheduler: ScanScheduler;
+  readonly enrichment: DeepSeekEnrichmentWorker;
   readonly server: Server;
   readonly address: BoundAddress | undefined;
   start(): Promise<BoundAddress>;
@@ -47,6 +55,10 @@ export function createApplicationRuntime(
     if (database === undefined) throw new Error("Database is not running");
     return database;
   };
+  const logger = options.logger ?? createLogger({
+    config: options.config,
+    level: options.config.diagnostics.level
+  });
   const browser = new BrowserManager({
     adapter: options.browserAdapter ?? new PlaywrightBrowserAdapter(),
     profileDirectory: options.config.paths.chromiumProfileDir
@@ -65,10 +77,27 @@ export function createApplicationRuntime(
     diagnostics,
     browser: () => browser
   });
+  const deepseekClient = options.config.deepseek.enabled && options.config.deepseek.apiKey !== undefined
+    ? new DeepSeekClient({
+      apiKey: options.config.deepseek.apiKey,
+      baseUrl: options.config.deepseek.baseUrl
+    })
+    : undefined;
+  const enrichmentService = new DeepSeekEnrichmentService({
+    database: getDatabase,
+    ...(deepseekClient === undefined ? {} : { client: deepseekClient }),
+    enabled: options.config.deepseek.enabled,
+    logger
+  });
+  const enrichment = new DeepSeekEnrichmentWorker({
+    database: getDatabase,
+    service: enrichmentService
+  });
   const scanner = new FacebookScanner({
     database: getDatabase,
     browser: () => browser,
-    failures: facebookFailures
+    failures: facebookFailures,
+    processingWake: () => enrichment.wake()
   });
   const scheduler = new ScanScheduler({
     database: getDatabase,
@@ -86,6 +115,7 @@ export function createApplicationRuntime(
     searchVerification: () => searchVerification,
     scanScheduler: () => scheduler,
     facebookHealth: () => facebookHealth,
+    deepseek: () => enrichment,
     ...(options.staticDirectory === undefined
       ? {}
       : { staticDirectory: options.staticDirectory })
@@ -112,6 +142,13 @@ export function createApplicationRuntime(
       stop: () => browser.shutdown()
     },
     {
+      name: "deepseek-enrichment",
+      start: () => {
+        if (options.config.deepseek.enabled) enrichment.start();
+      },
+      stop: () => enrichment.stop()
+    },
+    {
       name: "scheduler",
       start: () => scheduler.start(),
       stop: () => scheduler.stop()
@@ -134,6 +171,7 @@ export function createApplicationRuntime(
     },
     browser,
     scheduler,
+    enrichment,
     server,
     get address() {
       return address;

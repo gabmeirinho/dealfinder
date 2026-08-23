@@ -17,3 +17,4 @@ export * from "./listings/index.js";
 export * from "./normalization/index.js";
 export * from "./risk/index.js";
 export * from "./distance/index.js";
+export * from "./enrichment/index.js";

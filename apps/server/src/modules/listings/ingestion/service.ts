@@ -122,6 +122,7 @@ export class ListingIngestionService {
           evaluateVehicleMatch(effective, search.criteria),
           input.observedAt
         );
+        database.enrichmentProcessing.enqueue(ingested.listing.id, input.observedAt);
       }
 
       const missed = input.completeSnapshot

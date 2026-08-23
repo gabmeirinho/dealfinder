@@ -69,4 +69,31 @@ describe("localhost HTTP server", () => {
     ).rejects.toThrow(/non-loopback/u);
     expect(server.listening).toBe(false);
   });
+
+  it("exposes an explicit DeepSeek credit test and persisted pause status", async () => {
+    const database = openDatabase({ filename: ":memory:" });
+    let tests = 0;
+    const server = createHttpServer({
+      database: () => database,
+      deepseek: () => ({
+        testCreditAndResume: async () => {
+          tests += 1;
+          return tests > 1;
+        }
+      })
+    });
+    cleanup.push(() => database.close(), () => closeHttpServer(server));
+    const address = await listenHttpServer(server, { host: "127.0.0.1", port: 0 });
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    const status = await fetch(`${baseUrl}/api/integrations/deepseek/credit`);
+    expect(status.status).toBe(200);
+    expect(await status.json()).toMatchObject({ state: "active", downstreamPaused: false });
+    const failed = await fetch(`${baseUrl}/api/integrations/deepseek/credit`, { method: "POST" });
+    expect(failed.status).toBe(409);
+    expect(await failed.json()).toMatchObject({ available: false });
+    const succeeded = await fetch(`${baseUrl}/api/integrations/deepseek/credit`, { method: "POST" });
+    expect(succeeded.status).toBe(200);
+    expect(await succeeded.json()).toMatchObject({ available: true });
+  });
 });

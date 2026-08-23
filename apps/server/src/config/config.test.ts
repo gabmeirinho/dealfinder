@@ -25,6 +25,13 @@ describe("server configuration", () => {
     expect(config.paths.chromiumProfileDir).toBe(join(dataDir, "browser-profile"));
     expect(config.paths.diagnosticsDir).toBe(join(dataDir, "diagnostics"));
     expect(config.paths.backupsDir).toBe(join(dataDir, "backups"));
+    expect(config.deepseek.model).toBe("deepseek-v4-flash");
+  });
+
+  it("requires the Phase 4 DeepSeek model", () => {
+    expect(() => loadServerConfig({
+      env: { DEALFINDER_DEEPSEEK_MODEL: "deepseek-chat" }
+    })).toThrow(/DEALFINDER_DEEPSEEK_MODEL.*deepseek-v4-flash/u);
   });
 
   it("loads optional credentials from the ignored local environment file", () => {
@@ -113,4 +120,3 @@ describe("server configuration", () => {
     }
   });
 });
-

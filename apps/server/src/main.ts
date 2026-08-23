@@ -12,7 +12,7 @@ export async function runMain(): Promise<ApplicationRuntime> {
     level: config.diagnostics.level
   });
   const staticDirectory = fileURLToPath(new URL("../../web/dist/", import.meta.url));
-  const application = createApplicationRuntime({ config, staticDirectory });
+  const application = createApplicationRuntime({ config, staticDirectory, logger });
   const address = await application.start();
 
   logger.info("Dealfinder is ready", {

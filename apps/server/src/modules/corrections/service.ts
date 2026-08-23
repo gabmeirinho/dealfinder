@@ -42,6 +42,7 @@ export class CorrectionsService {
         database.corrections.listForListing(input.listingId)
       );
       this.reassess(database, input.listingId, facts, input.correctedAt);
+      database.enrichmentProcessing.enqueue(input.listingId, input.correctedAt);
       return { correction, facts };
     });
   }

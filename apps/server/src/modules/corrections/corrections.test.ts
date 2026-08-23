@@ -42,6 +42,10 @@ describe("corrections service", () => {
     });
     expect(setup.database.normalizedVehicles.getFacts(listing.id)?.facts.mileageKm).toBe(128_000);
     expect(service.effectiveFacts(listing.id)?.mileageKm).toBe(118_000);
+    expect(setup.database.enrichmentProcessing.getQueueItem(listing.id)).toMatchObject({
+      state: "queued",
+      sourceNormalizedAt: "2026-08-23T09:05:00.000Z"
+    });
   });
 
   it("recomputes risk and hard-filter decisions after a correction", () => {

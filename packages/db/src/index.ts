@@ -61,4 +61,13 @@ export type {
   CachedLocality,
   StoredListingDistance
 } from "./repositories/geocoding.js";
+export { EnrichmentProcessingRepository } from "./repositories/enrichment-processing.js";
+export type {
+  EnrichmentRequestFailure,
+  ProcessingClaim,
+  ProcessingControl,
+  ProcessingQueueItem,
+  ProcessingQueueState,
+  StoredEnrichment
+} from "./repositories/enrichment-processing.js";
 export { withTransaction } from "./transactions.js";

@@ -17,6 +17,10 @@ import {
   handleFacebookHealthRequest,
   type FacebookHealthService
 } from "../modules/facebook-health/index.js";
+import {
+  handleDeepSeekRequest,
+  type DeepSeekCreditController
+} from "../integrations/deepseek/index.js";
 
 export interface HttpServerOptions {
   database: () => DatabaseConnection;
@@ -24,6 +28,7 @@ export interface HttpServerOptions {
   searchVerification?: () => SearchVerificationService;
   scanScheduler?: () => ScanScheduler;
   facebookHealth?: () => FacebookHealthService;
+  deepseek?: () => DeepSeekCreditController;
   staticDirectory?: string;
   now?: () => Date;
 }
@@ -88,6 +93,14 @@ export function createHttpServer(options: HttpServerOptions): Server {
         options.facebookHealth !== undefined &&
         await handleFacebookHealthRequest(request, response, url, {
           health: options.facebookHealth
+        })
+      ) return;
+
+      if (
+        options.deepseek !== undefined &&
+        await handleDeepSeekRequest(request, response, url, {
+          database: options.database,
+          worker: options.deepseek
         })
       ) return;
 

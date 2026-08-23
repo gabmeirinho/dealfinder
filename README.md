@@ -112,6 +112,15 @@ their integrations are configured. Configuration validation rejects malformed
 values with field-specific messages, and configuration views and structured
 logs redact tokens and API keys.
 
+DeepSeek enrichment uses only `deepseek-v4-flash` with thinking disabled and a
+strict JSON schema. Provider requests contain the listing title, description,
+and normalized vehicle facts only. An insufficient-credit response leaves raw
+Facebook scans running but durably pauses all downstream processing and alerts;
+new candidates remain queued. After adding credit, explicitly test it with
+`POST /api/integrations/deepseek/credit`. Processing resumes only when the
+provider balance check succeeds and reports credit available. `GET` on the same
+endpoint reports the persisted pause state.
+
 SQLite data is migrated automatically when `openDatabase` opens a connection.
 The database uses foreign-key enforcement, WAL journaling for file-backed
 connections, atomic migration records, and UTC ISO-8601 text timestamps. The

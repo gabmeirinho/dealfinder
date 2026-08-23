@@ -2,7 +2,12 @@ import { isIP } from "node:net";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 
-import type { ConfigIssue, LogLevel, ServerConfig } from "@dealfinder/domain";
+import {
+  DEEPSEEK_ENRICHMENT_MODEL,
+  type ConfigIssue,
+  type LogLevel,
+  type ServerConfig
+} from "@dealfinder/domain";
 
 import { ConfigValidationError } from "./errors.js";
 import { readEnvFile } from "./env-file.js";
@@ -18,7 +23,6 @@ const DEFAULT_PORT = 3000;
 const DEFAULT_TIMEZONE = "Europe/Lisbon";
 const DEFAULT_DATA_DIR = join(homedir(), ".local", "share", "dealfinder");
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
-const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
 const LOG_LEVELS: readonly LogLevel[] = ["debug", "info", "warn", "error"];
 
 export function loadServerConfig(options: LoadServerConfigOptions = {}): ServerConfig {
@@ -116,10 +120,8 @@ export function loadServerConfig(options: LoadServerConfigOptions = {}): ServerC
         DEFAULT_DEEPSEEK_BASE_URL,
         issues
       ),
-      model: readString(
+      model: readDeepSeekModel(
         environment.DEALFINDER_DEEPSEEK_MODEL,
-        "DEALFINDER_DEEPSEEK_MODEL",
-        DEFAULT_DEEPSEEK_MODEL,
         issues
       )
     }
@@ -130,6 +132,25 @@ export function loadServerConfig(options: LoadServerConfigOptions = {}): ServerC
   }
 
   return config;
+}
+
+function readDeepSeekModel(
+  raw: string | undefined,
+  issues: { path: string; message: string }[]
+): string {
+  const value = readString(
+    raw,
+    "DEALFINDER_DEEPSEEK_MODEL",
+    DEEPSEEK_ENRICHMENT_MODEL,
+    issues
+  );
+  if (value !== DEEPSEEK_ENRICHMENT_MODEL) {
+    issues.push({
+      path: "DEALFINDER_DEEPSEEK_MODEL",
+      message: `must be ${DEEPSEEK_ENRICHMENT_MODEL}`
+    });
+  }
+  return DEEPSEEK_ENRICHMENT_MODEL;
 }
 
 function readHost(raw: string | undefined, issues: { path: string; message: string }[]): string {

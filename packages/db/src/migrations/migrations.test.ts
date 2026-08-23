@@ -28,7 +28,7 @@ describe("database migrations", () => {
 
     expect(testDatabase.connection.migrationResult).toEqual({
       currentVersion: LATEST_SCHEMA_VERSION,
-      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     });
     const migrations = testDatabase.connection.database
       .prepare("SELECT version, name FROM schema_migrations ORDER BY version")
@@ -42,7 +42,8 @@ describe("database migrations", () => {
       { version: 6, name: "create_facebook_health" },
       { version: 7, name: "create_listing_lifecycle" },
       { version: 8, name: "create_normalized_vehicle_facts" },
-      { version: 9, name: "create_geocoding_cache" }
+      { version: 9, name: "create_geocoding_cache" },
+      { version: 10, name: "create_enrichment_processing" }
     ]);
   });
 
@@ -75,6 +76,7 @@ describe("database migrations", () => {
 
     expect(schema).not.toMatch(/bot_token|api_key|password|browser_cookie|facebook_session/u);
     expect(schema).not.toMatch(/seller_name|seller_profile|seller_contact|phone_number|email_address/u);
+    expect(schema).not.toMatch(/request_body|request_payload|response_body|system_prompt|api_secret/u);
   });
 
   it("backfills Phase 3 candidates as a non-alertable initial backlog", () => {
@@ -101,7 +103,7 @@ describe("database migrations", () => {
     });
 
     const result = runMigrations(database.database, allMigrations, () => new Date("2026-08-23"));
-    expect(result.appliedVersions).toEqual([7, 8, 9]);
+    expect(result.appliedVersions).toEqual([7, 8, 9, 10]);
     const listing = database.database.prepare(`
       SELECT id, discovery_kind FROM listings WHERE source_listing_id = ?
     `).get("100000000000001") as unknown as { id: number; discovery_kind: string };
