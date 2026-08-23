@@ -12,6 +12,7 @@ export interface ServerConfig {
     chromiumProfileDir: string;
     diagnosticsDir: string;
     backupsDir: string;
+    thumbnailsDir: string;
   };
   diagnostics: {
     enabled: boolean;
@@ -47,4 +48,3 @@ export interface ConfigIssue {
   path: string;
   message: string;
 }
-

@@ -72,4 +72,12 @@ export type {
 } from "./repositories/enrichment-processing.js";
 export { DealScoresRepository } from "./repositories/deal-scores.js";
 export type { StoredDealScore } from "./repositories/deal-scores.js";
+export { DuplicatesRepository } from "./repositories/duplicates.js";
+export type {
+  SaveThumbnailMetadata,
+  StoredDuplicateGroup,
+  StoredDuplicateMember,
+  StoredListingFingerprint,
+  StoredThumbnailMetadata
+} from "./repositories/duplicates.js";
 export { withTransaction } from "./transactions.js";

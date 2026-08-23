@@ -28,6 +28,11 @@ import {
   DeepSeekEnrichmentWorker
 } from "../integrations/deepseek/index.js";
 import { DealScoringService } from "../modules/scoring/index.js";
+import {
+  DuplicateDetectionService,
+  DuplicateMaintenanceWorker,
+  ThumbnailStorage
+} from "../modules/duplicates/index.js";
 
 export interface ApplicationOptions {
   config: ServerConfig;
@@ -42,6 +47,7 @@ export interface ApplicationRuntime {
   readonly scheduler: ScanScheduler;
   readonly enrichment: DeepSeekEnrichmentWorker;
   readonly scoring: DealScoringService;
+  readonly duplicates: DuplicateMaintenanceWorker;
   readonly server: Server;
   readonly address: BoundAddress | undefined;
   start(): Promise<BoundAddress>;
@@ -86,6 +92,21 @@ export function createApplicationRuntime(
     })
     : undefined;
   const scoring = new DealScoringService({ database: getDatabase });
+  const thumbnailStorage = new ThumbnailStorage({
+    directory: options.config.paths.thumbnailsDir,
+    database: getDatabase
+  });
+  const duplicateDetection = new DuplicateDetectionService({
+    database: getDatabase,
+    thumbnails: thumbnailStorage,
+    logger
+  });
+  const duplicates = new DuplicateMaintenanceWorker({
+    service: duplicateDetection,
+    onError: (error) => logger.error("Duplicate maintenance failed", {
+      errorType: error instanceof Error ? error.name : "unknown"
+    })
+  });
   const enrichmentService = new DeepSeekEnrichmentService({
     database: getDatabase,
     ...(deepseekClient === undefined ? {} : { client: deepseekClient }),
@@ -93,6 +114,7 @@ export function createApplicationRuntime(
     logger,
     afterEnrichment: (_listingId, completedAt) => {
       scoring.recomputeAll(completedAt);
+      duplicates.wake();
     }
   });
   const enrichment = new DeepSeekEnrichmentWorker({
@@ -103,7 +125,10 @@ export function createApplicationRuntime(
     database: getDatabase,
     browser: () => browser,
     failures: facebookFailures,
-    processingWake: () => enrichment.wake()
+    processingWake: () => {
+      enrichment.wake();
+      duplicates.wake();
+    }
   });
   const scheduler = new ScanScheduler({
     database: getDatabase,
@@ -162,6 +187,11 @@ export function createApplicationRuntime(
       stop: () => enrichment.stop()
     },
     {
+      name: "duplicate-maintenance",
+      start: () => duplicates.start(),
+      stop: () => duplicates.stop()
+    },
+    {
       name: "scheduler",
       start: () => scheduler.start(),
       stop: () => scheduler.stop()
@@ -186,6 +216,7 @@ export function createApplicationRuntime(
     scheduler,
     enrichment,
     scoring,
+    duplicates,
     server,
     get address() {
       return address;

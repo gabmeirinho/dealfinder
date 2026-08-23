@@ -28,7 +28,7 @@ describe("database migrations", () => {
 
     expect(testDatabase.connection.migrationResult).toEqual({
       currentVersion: LATEST_SCHEMA_VERSION,
-      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     });
     const migrations = testDatabase.connection.database
       .prepare("SELECT version, name FROM schema_migrations ORDER BY version")
@@ -44,7 +44,8 @@ describe("database migrations", () => {
       { version: 8, name: "create_normalized_vehicle_facts" },
       { version: 9, name: "create_geocoding_cache" },
       { version: 10, name: "create_enrichment_processing" },
-      { version: 11, name: "create_deal_scores" }
+      { version: 11, name: "create_deal_scores" },
+      { version: 12, name: "create_duplicate_groups" }
     ]);
   });
 
@@ -104,7 +105,7 @@ describe("database migrations", () => {
     });
 
     const result = runMigrations(database.database, allMigrations, () => new Date("2026-08-23"));
-    expect(result.appliedVersions).toEqual([7, 8, 9, 10, 11]);
+    expect(result.appliedVersions).toEqual([7, 8, 9, 10, 11, 12]);
     const listing = database.database.prepare(`
       SELECT id, discovery_kind FROM listings WHERE source_listing_id = ?
     `).get("100000000000001") as unknown as { id: number; discovery_kind: string };

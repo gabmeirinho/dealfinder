@@ -79,6 +79,13 @@ export function loadServerConfig(options: LoadServerConfigOptions = {}): ServerC
         dataDir,
         "backups",
         issues
+      ),
+      thumbnailsDir: readDataPath(
+        environment.DEALFINDER_THUMBNAILS_DIR,
+        "DEALFINDER_THUMBNAILS_DIR",
+        dataDir,
+        "thumbnails",
+        issues
       )
     },
     diagnostics: {

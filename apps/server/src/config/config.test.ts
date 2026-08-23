@@ -25,6 +25,7 @@ describe("server configuration", () => {
     expect(config.paths.chromiumProfileDir).toBe(join(dataDir, "browser-profile"));
     expect(config.paths.diagnosticsDir).toBe(join(dataDir, "diagnostics"));
     expect(config.paths.backupsDir).toBe(join(dataDir, "backups"));
+    expect(config.paths.thumbnailsDir).toBe(join(dataDir, "thumbnails"));
     expect(config.deepseek.model).toBe("deepseek-v4-flash");
   });
 

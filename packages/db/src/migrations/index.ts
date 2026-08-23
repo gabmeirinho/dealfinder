@@ -9,6 +9,7 @@ import { createNormalizedVehicleFactsMigration } from "./008-create-normalized-v
 import { createGeocodingCacheMigration } from "./009-create-geocoding-cache.js";
 import { createEnrichmentProcessingMigration } from "./010-create-enrichment-processing.js";
 import { createDealScoresMigration } from "./011-create-deal-scores.js";
+import { createDuplicateGroupsMigration } from "./012-create-duplicate-groups.js";
 import type { Migration } from "./types.js";
 
 export const allMigrations: readonly Migration[] = [
@@ -22,7 +23,8 @@ export const allMigrations: readonly Migration[] = [
   createNormalizedVehicleFactsMigration,
   createGeocodingCacheMigration,
   createEnrichmentProcessingMigration,
-  createDealScoresMigration
+  createDealScoresMigration,
+  createDuplicateGroupsMigration
 ];
 
 export const LATEST_SCHEMA_VERSION =
