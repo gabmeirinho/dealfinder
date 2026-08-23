@@ -11,6 +11,7 @@ import { SearchSourcesRepository } from "./repositories/search-sources.js";
 import { RawCandidatesRepository } from "./repositories/raw-candidates.js";
 import { ScanRunsRepository } from "./repositories/scan-runs.js";
 import { FacebookHealthRepository } from "./repositories/facebook-health.js";
+import { ListingsRepository } from "./repositories/listings.js";
 import { withTransaction } from "./transactions.js";
 
 export interface OpenDatabaseOptions {
@@ -29,6 +30,7 @@ export interface DatabaseConnection {
   readonly rawCandidates: RawCandidatesRepository;
   readonly scanRuns: ScanRunsRepository;
   readonly facebookHealth: FacebookHealthRepository;
+  readonly listings: ListingsRepository;
   transaction<T>(operation: () => T): T;
   close(): void;
 }
@@ -68,6 +70,7 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseConnection {
     const rawCandidates = new RawCandidatesRepository(database);
     const scanRuns = new ScanRunsRepository(database);
     const facebookHealth = new FacebookHealthRepository(database);
+    const listings = new ListingsRepository(database);
     let closed = false;
 
     return {
@@ -80,6 +83,7 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseConnection {
       rawCandidates,
       scanRuns,
       facebookHealth,
+      listings,
       transaction: <T>(operation: () => T) => withTransaction(database, operation),
       close: () => {
         if (closed) return;

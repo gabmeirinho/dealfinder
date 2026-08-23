@@ -36,4 +36,12 @@ export type {
   CreateAcquisitionPause,
   CreateDiagnosticArtifact
 } from "./repositories/facebook-health.js";
+export { ListingsRepository } from "./repositories/listings.js";
+export type {
+  IngestListingObservation,
+  IngestedListingObservation,
+  Listing,
+  ListingEvent,
+  ListingPricePoint
+} from "./repositories/listings.js";
 export { withTransaction } from "./transactions.js";

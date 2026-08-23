@@ -5,6 +5,7 @@ import {
 } from "@dealfinder/domain";
 
 import type { MarketplaceResultSnapshot } from "../../../modules/browser/index.js";
+import { ListingIngestionService } from "../../../modules/listings/index.js";
 import { fingerprintSearchCriteria } from "../../../modules/search-verification/fingerprint.js";
 import {
   classifyFacebookPage,
@@ -174,10 +175,12 @@ export class FacebookScanner {
     result: FacebookScanResult
   ): FacebookScanResult {
     const database = this.#database();
-    database.transaction(() => {
-      for (const candidate of candidates) {
-        database.rawCandidates.saveObservation({ searchId, observedAt, candidate });
-      }
+    new ListingIngestionService(() => database).ingestScan({
+      searchId,
+      observedAt,
+      initialScan: result.initialScan,
+      completeSnapshot: result.stopReason === "results_end",
+      candidates
     });
     return result;
   }

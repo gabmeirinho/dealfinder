@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 
+import { createVehicleSearchDraft } from "@dealfinder/domain";
+
 import { openDatabase, type DatabaseConnection } from "../connection.js";
-import { LATEST_SCHEMA_VERSION } from "./index.js";
+import { runMigrations } from "../migration-runner.js";
+import { allMigrations, LATEST_SCHEMA_VERSION } from "./index.js";
 import { createTestDatabase, type TestDatabase } from "../testing/create-test-database.js";
 
 interface MigrationRow {
@@ -25,7 +28,7 @@ describe("database migrations", () => {
 
     expect(testDatabase.connection.migrationResult).toEqual({
       currentVersion: LATEST_SCHEMA_VERSION,
-      appliedVersions: [1, 2, 3, 4, 5, 6]
+      appliedVersions: [1, 2, 3, 4, 5, 6, 7]
     });
     const migrations = testDatabase.connection.database
       .prepare("SELECT version, name FROM schema_migrations ORDER BY version")
@@ -36,7 +39,8 @@ describe("database migrations", () => {
       { version: 3, name: "create_search_sources" },
       { version: 4, name: "create_raw_candidates" },
       { version: 5, name: "create_scan_state" },
-      { version: 6, name: "create_facebook_health" }
+      { version: 6, name: "create_facebook_health" },
+      { version: 7, name: "create_listing_lifecycle" }
     ]);
   });
 
@@ -68,5 +72,40 @@ describe("database migrations", () => {
       .toLowerCase();
 
     expect(schema).not.toMatch(/bot_token|api_key|password|browser_cookie|facebook_session/u);
+  });
+
+  it("backfills Phase 3 candidates as a non-alertable initial backlog", () => {
+    const database = openDatabase({
+      filename: ":memory:",
+      migrations: allMigrations.slice(0, 6)
+    });
+    const draft = createVehicleSearchDraft("Existing Golf search");
+    draft.criteria.makeKeywords = { value: ["Volkswagen"], strength: "hard" };
+    const search = database.searches.create(draft);
+    database.rawCandidates.saveObservation({
+      searchId: search.id,
+      observedAt: "2026-08-22T09:00:00.000Z",
+      candidate: {
+        source: "facebook",
+        sourceListingId: "100000000000001",
+        url: "https://www.facebook.com/marketplace/item/100000000000001/",
+        title: "Volkswagen Golf",
+        displayedPrice: "14 950 €",
+        location: "Lisboa",
+        thumbnailUrl: null,
+        rawCardFacts: ["Volkswagen Golf"]
+      }
+    });
+
+    const result = runMigrations(database.database, allMigrations, () => new Date("2026-08-23"));
+    expect(result.appliedVersions).toEqual([7]);
+    const listing = database.database.prepare(`
+      SELECT id, discovery_kind FROM listings WHERE source_listing_id = ?
+    `).get("100000000000001") as unknown as { id: number; discovery_kind: string };
+    expect(listing.discovery_kind).toBe("initial_backlog");
+    expect(database.database.prepare(`
+      SELECT type, alertable FROM listing_events WHERE listing_id = ?
+    `).all(listing.id)).toEqual([{ type: "new_listing", alertable: 0 }]);
+    database.close();
   });
 });
