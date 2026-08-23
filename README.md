@@ -84,6 +84,22 @@ with the review date. `npm run fixtures:check` rejects pending reviews, scripts,
 forms, session/contact markers, profile links, and unapproved external URLs.
 Raw captures must remain outside the repository and be deleted after review.
 
+Verified active searches share one sequential scan queue. Each manual startup
+queues one priority-ordered catch-up; work waits safely if the visible browser
+is not open and resumes when it opens. Successful searches are scheduled at a
+randomized 15–30 minute interval, while failures use bounded backoff. Initial
+scans retain at most 300 cards; later scans stop after 50 consecutive known
+listing IDs. Dashboard **Scan** requests enter this same durable queue, and the
+saved-search list reports persisted last/next scan times.
+
+Facebook checkpoints, login and consent prompts, Marketplace restrictions,
+rate limits, empty or partial results, and unreviewed selector layouts fail
+closed. DealFinder commits no observations from that scan, records the affected
+browser/source/search pause, and waits for an explicit dashboard resume. A
+failure screenshot and text-free structural DOM artifact remain only in the
+local diagnostics directory and expire after seven days; screenshots are never
+sent to integrations, and selector repair is never attempted automatically.
+
 The Telegram and DeepSeek credentials are optional and may remain unset until
 their integrations are configured. Configuration validation rejects malformed
 values with field-specific messages, and configuration views and structured

@@ -1,5 +1,7 @@
 import type {
   ManagedVehicleSearch,
+  ScanQueueReceipt,
+  ScanSchedule,
   SearchValidationIssue,
   VehicleSearch
 } from "@dealfinder/domain";
@@ -15,11 +17,7 @@ export interface SearchListResponse {
   searches: ManagedVehicleSearch[];
 }
 
-export interface SearchScanRequestResponse {
-  searchId: string;
-  status: "pending";
-  requestedAt: string;
-}
+export type SearchScanRequestResponse = ScanQueueReceipt;
 
 export interface SearchApiErrorResponse {
   error: {
@@ -32,7 +30,8 @@ export interface SearchApiErrorResponse {
 
 export function presentSearch(
   search: VehicleSearch,
-  verification?: SearchSourceVerification
+  verification?: SearchSourceVerification,
+  schedule?: ScanSchedule
 ): ManagedVehicleSearch {
   const verificationState = verification === undefined
     ? "unverified"
@@ -41,8 +40,8 @@ export function presentSearch(
       : "stale";
   return {
     ...search,
-    lastScanAt: null,
-    nextScanAt: null,
+    lastScanAt: schedule?.lastScanAt ?? null,
+    nextScanAt: schedule?.nextScanAt ?? null,
     sourceVerification: {
       state: verificationState,
       verifiedAt: verification?.verifiedAt ?? null

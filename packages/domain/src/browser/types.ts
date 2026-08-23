@@ -3,6 +3,7 @@ export const BROWSER_ATTENTION_REASONS = [
   "login_required",
   "marketplace_denied",
   "checkpoint",
+  "consent_required",
   "launch_failed"
 ] as const;
 

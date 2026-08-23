@@ -4,6 +4,7 @@ import type {
 } from "@dealfinder/domain";
 
 import type { BrowserAdapter, BrowserSession } from "./adapter.js";
+import type { MarketplaceResultSnapshot } from "./adapter.js";
 
 export class BrowserCommandError extends Error {
   public constructor(
@@ -28,6 +29,7 @@ export class BrowserManager {
   #session: BrowserSession | undefined;
   #removeClosedListener: (() => void) | undefined;
   #status: BrowserStatus;
+  readonly #openedListeners = new Set<() => void>();
 
   public constructor(options: BrowserManagerOptions) {
     this.#adapter = options.adapter;
@@ -38,6 +40,11 @@ export class BrowserManager {
 
   public getStatus(): BrowserStatus {
     return { ...this.#status };
+  }
+
+  public onOpened(listener: () => void): () => void {
+    this.#openedListeners.add(listener);
+    return () => this.#openedListeners.delete(listener);
   }
 
   public async open(): Promise<BrowserStatus> {
@@ -93,6 +100,36 @@ export class BrowserManager {
     return this.requireOpenSession().currentUrl();
   }
 
+  public async snapshotMarketplaceResults(): Promise<MarketplaceResultSnapshot> {
+    const session = this.requireOpenSession();
+    const snapshot = session.snapshotMarketplaceResults;
+    if (snapshot === undefined) {
+      throw new BrowserCommandError(
+        "BROWSER_SCAN_UNSUPPORTED",
+        "The active browser adapter cannot inspect Marketplace results"
+      );
+    }
+    return await snapshot.call(session);
+  }
+
+  public async scrollMarketplaceResults(): Promise<void> {
+    const session = this.requireOpenSession();
+    const scroll = session.scrollMarketplaceResults;
+    if (scroll === undefined) {
+      throw new BrowserCommandError(
+        "BROWSER_SCAN_UNSUPPORTED",
+        "The active browser adapter cannot scroll Marketplace results"
+      );
+    }
+    await scroll.call(session);
+  }
+
+  public async captureDiagnosticScreenshot(): Promise<Uint8Array | null> {
+    const session = this.requireOpenSession();
+    const capture = session.captureDiagnosticScreenshot;
+    return capture === undefined ? null : await capture.call(session);
+  }
+
   public async pauseForAttention(
     reason: Exclude<BrowserAttentionReason, "browser_closed" | "launch_failed">,
     detail: string | null = null
@@ -122,6 +159,7 @@ export class BrowserManager {
       this.#session = session;
       this.#removeClosedListener = session.onClosed(() => this.handleUnexpectedClosure());
       this.#status = this.createStatus("open", null, null, session.controlledTabs);
+      for (const listener of this.#openedListeners) listener();
       return this.getStatus();
     } catch (error: unknown) {
       const detail = error instanceof Error ? error.message : "Chromium could not be opened";

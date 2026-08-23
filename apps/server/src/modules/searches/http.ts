@@ -17,12 +17,16 @@ import {
   type SearchResponse,
   type SearchScanRequestResponse
 } from "./contracts.js";
+import { fingerprintSearchCriteria } from "../search-verification/fingerprint.js";
 
 const MAX_REQUEST_BYTES = 1_000_000;
 
 export interface SearchHttpOptions {
   database: () => DatabaseConnection;
   now?: () => Date;
+  scanQueue?: {
+    requestScan(searchId: string): SearchScanRequestResponse;
+  };
 }
 
 export async function handleSearchesRequest(
@@ -44,7 +48,8 @@ export async function handleSearchesRequest(
         const body: SearchListResponse = {
           searches: database.searches.list().map((search) => presentSearch(
             search,
-            database.searchSources.get(search.id, "facebook")
+            database.searchSources.get(search.id, "facebook"),
+            database.scanRuns.getSchedule(search.id)
           ))
         };
         sendJson(response, 200, body);
@@ -72,7 +77,8 @@ export async function handleSearchesRequest(
       const body: SearchListResponse = {
         searches: searches.map((search) => presentSearch(
           search,
-          database.searchSources.get(search.id, "facebook")
+          database.searchSources.get(search.id, "facebook"),
+          database.scanRuns.getSchedule(search.id)
         ))
       };
       sendJson(response, 200, body);
@@ -160,11 +166,37 @@ export async function handleSearchesRequest(
           "Activate the search before requesting a manual scan"
         );
       }
-      const body: SearchScanRequestResponse = {
-        searchId: search.id,
-        status: "pending",
-        requestedAt: now().toISOString()
-      };
+      const source = database.searchSources.get(search.id, "facebook");
+      if (source === undefined || source.criteriaFingerprint !== fingerprintSearchCriteria(search)) {
+        throw new SearchApiError(
+          409,
+          "SEARCH_NOT_VERIFIED",
+          "Verify the current search criteria in Facebook before scanning"
+        );
+      }
+      const activePause = database.facebookHealth.listActivePauses().find((pause) =>
+        pause.scope === "browser" || pause.scope === "source" || pause.scopeKey === search.id
+      );
+      if (activePause !== undefined) {
+        throw new SearchApiError(
+          409,
+          "FACEBOOK_ACQUISITION_PAUSED",
+          activePause.detail,
+          undefined,
+          { pauseId: activePause.id, failureKind: activePause.failureKind }
+        );
+      }
+      const requestedAt = now().toISOString();
+      const run = options.scanQueue?.requestScan(search.id) ??
+        database.scanRuns.enqueue(search.id, "manual", requestedAt);
+      const body: SearchScanRequestResponse = "status" in run
+        ? run
+        : {
+            runId: run.id,
+            searchId: run.searchId,
+            status: "pending",
+            requestedAt: run.requestedAt
+          };
       sendJson(response, 202, body);
       return true;
     }
@@ -480,7 +512,8 @@ function sendSearch(
   const body: SearchResponse = {
     search: presentSearch(
       search,
-      database.searchSources.get(search.id, "facebook")
+      database.searchSources.get(search.id, "facebook"),
+      database.scanRuns.getSchedule(search.id)
     )
   };
   sendJson(response, statusCode, body);

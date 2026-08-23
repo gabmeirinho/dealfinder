@@ -66,6 +66,25 @@ describe("saved-search management API", () => {
     expect(await json(readResponse)).toEqual(created);
   });
 
+  it("returns persisted last and next scan status", async () => {
+    const search = database.searches.create(searchDraft("Scheduled Golf"));
+    database.scanRuns.recordSchedule(
+      search.id,
+      "2026-08-19T12:15:00.000Z",
+      "2026-08-19T12:45:00.000Z",
+      0
+    );
+
+    const response = await api(`/api/searches/${search.id}`);
+
+    expect(await json(response)).toMatchObject({
+      search: {
+        lastScanAt: "2026-08-19T12:15:00.000Z",
+        nextScanAt: "2026-08-19T12:45:00.000Z"
+      }
+    });
+  });
+
   it("updates persisted criteria and returns field validation errors", async () => {
     const created = database.searches.create(searchDraft("Original"));
     const update = searchDraft("Updated", 4);
@@ -277,9 +296,17 @@ describe("saved-search management API", () => {
 
   it("accepts manual scans only for active resolved searches", async () => {
     const active = database.searches.create(searchDraft("Scan me"));
+    database.searchSources.saveVerification({
+      searchId: active.id,
+      source: "facebook",
+      sourceUrl: "https://www.facebook.com/marketplace/category/vehicles/?query=Golf",
+      criteriaFingerprint: fingerprintSearchCriteria(active),
+      verifiedAt: "2026-08-19T12:15:00.000Z"
+    });
     const response = await api(`/api/searches/${active.id}/scan`, { method: "POST" });
     expect(response.status).toBe(202);
     expect(await json(response)).toEqual({
+      runId: expect.any(String),
       searchId: active.id,
       status: "pending",
       requestedAt: "2026-08-19T12:30:00.000Z"
@@ -294,6 +321,15 @@ describe("saved-search management API", () => {
     expect(conflictResponse.status).toBe(409);
     expect(await json(conflictResponse)).toMatchObject({
       error: { code: "SEARCH_INACTIVE" }
+    });
+
+    const unverified = database.searches.create(searchDraft("Unverified"));
+    const unverifiedResponse = await api(`/api/searches/${unverified.id}/scan`, {
+      method: "POST"
+    });
+    expect(unverifiedResponse.status).toBe(409);
+    expect(await json(unverifiedResponse)).toMatchObject({
+      error: { code: "SEARCH_NOT_VERIFIED" }
     });
   });
 

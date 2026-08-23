@@ -1,0 +1,209 @@
+import type { DatabaseConnection } from "@dealfinder/db";
+import {
+  INITIAL_SCAN_CARD_LIMIT,
+  KNOWN_LISTING_STOP_COUNT
+} from "@dealfinder/domain";
+
+import type { MarketplaceResultSnapshot } from "../../../modules/browser/index.js";
+import { fingerprintSearchCriteria } from "../../../modules/search-verification/fingerprint.js";
+import {
+  classifyFacebookPage,
+  FacebookAcquisitionPausedError,
+  selectorContractFailure,
+  type FacebookPageFailure
+} from "../failures/index.js";
+import {
+  FacebookResultContractError,
+  parseFacebookResultPage,
+  type FacebookRawCandidate,
+  type FacebookResultPage
+} from "../parser/index.js";
+
+export interface FacebookScanResult {
+  cardsSeen: number;
+  newCandidates: number;
+  initialScan: boolean;
+  stopReason: "initial_limit" | "known_streak" | "results_end" | "no_progress";
+}
+
+export interface FacebookScanBrowser {
+  navigate(url: string): Promise<string>;
+  snapshotMarketplaceResults(): Promise<MarketplaceResultSnapshot>;
+  scrollMarketplaceResults(): Promise<void>;
+}
+
+export interface FacebookScannerOptions {
+  database: () => DatabaseConnection;
+  browser: () => FacebookScanBrowser;
+  now?: () => Date;
+  failures?: {
+    pause(
+      searchId: string,
+      failure: FacebookPageFailure,
+      snapshot: MarketplaceResultSnapshot
+    ): Promise<{ id: string }>;
+  };
+}
+
+export class FacebookScanner {
+  readonly #database: () => DatabaseConnection;
+  readonly #browser: () => FacebookScanBrowser;
+  readonly #now: () => Date;
+  readonly #failures: FacebookScannerOptions["failures"];
+
+  public constructor(options: FacebookScannerOptions) {
+    this.#database = options.database;
+    this.#browser = options.browser;
+    this.#now = options.now ?? (() => new Date());
+    this.#failures = options.failures;
+  }
+
+  public async scan(searchId: string): Promise<FacebookScanResult> {
+    const database = this.#database();
+    const search = database.searches.get(searchId);
+    if (search === undefined) throw new FacebookScannerError("SEARCH_NOT_FOUND", "Saved search not found");
+    if (!search.active) throw new FacebookScannerError("SEARCH_INACTIVE", "Saved search is paused");
+    const verification = database.searchSources.get(searchId, "facebook");
+    if (verification === undefined) {
+      throw new FacebookScannerError("SEARCH_UNVERIFIED", "Verify this search in Facebook before scanning");
+    }
+    if (verification.criteriaFingerprint !== fingerprintSearchCriteria(search)) {
+      throw new FacebookScannerError(
+        "SEARCH_VERIFICATION_STALE",
+        "Search criteria changed; verify the Facebook results again before scanning"
+      );
+    }
+
+    const initialScan = !database.scanRuns.hasSucceeded(searchId);
+    const observedAt = this.#now().toISOString();
+    const browser = this.#browser();
+    await browser.navigate(verification.sourceUrl);
+    const seenThisScan = new Set<string>();
+    const staged: FacebookRawCandidate[] = [];
+    let cardsSeen = 0;
+    let newCandidates = 0;
+    let consecutiveKnown = 0;
+    let unchangedSnapshots = 0;
+
+    while (true) {
+      const snapshot = await browser.snapshotMarketplaceResults();
+      let newIdsInSnapshot = 0;
+      const classified = classifyFacebookPage(snapshot, {
+        unchangedSnapshots
+      });
+      if (classified !== null) await this.pause(searchId, classified, snapshot);
+      if (snapshot.cards.length > 0) {
+        let parsed: FacebookResultPage;
+        try {
+          parsed = parseFacebookResultPage(wrapCards(snapshot.cards));
+        } catch (error: unknown) {
+          if (error instanceof FacebookResultContractError) {
+            await this.pause(searchId, selectorContractFailure(), snapshot);
+          }
+          throw error;
+        }
+        if (parsed.rejectedCards.length > 0) {
+          await this.pause(searchId, selectorContractFailure(), snapshot);
+        }
+        for (const candidate of parsed.candidates) {
+          if (seenThisScan.has(candidate.sourceListingId)) continue;
+          seenThisScan.add(candidate.sourceListingId);
+          newIdsInSnapshot += 1;
+          cardsSeen += 1;
+          const known = database.rawCandidates.get("facebook", candidate.sourceListingId) !== undefined;
+          staged.push(candidate);
+          if (known) {
+            consecutiveKnown += 1;
+          } else {
+            consecutiveKnown = 0;
+            newCandidates += 1;
+          }
+
+          if (initialScan && cardsSeen >= INITIAL_SCAN_CARD_LIMIT) {
+            return this.commit(
+              searchId,
+              observedAt,
+              staged,
+              { cardsSeen, newCandidates, initialScan, stopReason: "initial_limit" }
+            );
+          }
+          if (!initialScan && consecutiveKnown >= KNOWN_LISTING_STOP_COUNT) {
+            return this.commit(
+              searchId,
+              observedAt,
+              staged,
+              { cardsSeen, newCandidates, initialScan, stopReason: "known_streak" }
+            );
+          }
+        }
+      }
+
+      const nextUnchangedSnapshots = newIdsInSnapshot === 0
+        ? unchangedSnapshots + 1
+        : 0;
+      const stalledFailure = classifyFacebookPage(snapshot, {
+        unchangedSnapshots: nextUnchangedSnapshots
+      });
+      if (stalledFailure !== null) await this.pause(searchId, stalledFailure, snapshot);
+
+      if (snapshot.atEnd) {
+        return this.commit(
+          searchId,
+          observedAt,
+          staged,
+          { cardsSeen, newCandidates, initialScan, stopReason: "results_end" }
+        );
+      }
+      unchangedSnapshots = nextUnchangedSnapshots;
+      if (unchangedSnapshots >= 3) {
+        return this.commit(
+          searchId,
+          observedAt,
+          staged,
+          { cardsSeen, newCandidates, initialScan, stopReason: "no_progress" }
+        );
+      }
+      await browser.scrollMarketplaceResults();
+    }
+  }
+
+  private commit(
+    searchId: string,
+    observedAt: string,
+    candidates: readonly FacebookRawCandidate[],
+    result: FacebookScanResult
+  ): FacebookScanResult {
+    const database = this.#database();
+    database.transaction(() => {
+      for (const candidate of candidates) {
+        database.rawCandidates.saveObservation({ searchId, observedAt, candidate });
+      }
+    });
+    return result;
+  }
+
+  private async pause(
+    searchId: string,
+    failure: FacebookPageFailure,
+    snapshot: MarketplaceResultSnapshot
+  ): Promise<never> {
+    if (this.#failures === undefined) {
+      throw new FacebookAcquisitionPausedError(failure, "unpersisted");
+    }
+    const pause = await this.#failures.pause(searchId, failure, snapshot);
+    throw new FacebookAcquisitionPausedError(failure, pause.id);
+  }
+}
+
+export class FacebookScannerError extends Error {
+  public constructor(public readonly code: string, message: string) {
+    super(message);
+    this.name = "FacebookScannerError";
+  }
+}
+
+function wrapCards(cards: readonly string[]): string {
+  return `<main data-dealfinder-results-contract="1">${cards
+    .map((card) => `<article data-dealfinder-card="marketplace-item">${card}</article>`)
+    .join("")}</main>`;
+}

@@ -86,7 +86,7 @@ describe("managed browser", () => {
     expect(adapter.sessions).toHaveLength(2);
   });
 
-  it.each(["login_required", "marketplace_denied", "checkpoint"] as const)(
+  it.each(["login_required", "marketplace_denied", "checkpoint", "consent_required"] as const)(
     "closes and pauses for %s until explicitly resumed",
     async (reason) => {
       const adapter = new FakeBrowserAdapter();

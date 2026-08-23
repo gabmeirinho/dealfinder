@@ -72,15 +72,20 @@ function parseCard(
     .map((node) => ({ node, parsed: parseListingUrl(attribute(node, "href")) }))
     .find((entry) => entry.parsed !== null);
   const sourceListingId = itemLink?.parsed?.id ?? null;
-  const title = fieldText(card, "title");
+  const cardTexts = unique(leafTexts(card));
+  const displayedPrice = fieldText(card, "price") ?? inferPrice(cardTexts);
+  const title = fieldText(card, "title") ?? inferTitle(cardTexts, displayedPrice);
   const reasons: string[] = [];
 
   if (itemLink === undefined) reasons.push("A canonical Marketplace item URL is required");
   if (title === null) reasons.push("A non-empty listing title is required");
   if (reasons.length > 0) return { cardIndex, sourceListingId, reasons };
 
-  const displayedPrice = fieldText(card, "price") ?? inferPrice(card);
-  const location = fieldText(card, "location");
+  const location = fieldText(card, "location") ?? inferLocation(
+    cardTexts,
+    displayedPrice,
+    title as string
+  );
   const rawCardFacts = unique([
     ...fieldTexts(card, "fact"),
     ...[displayedPrice, title, location].filter((value): value is string => value !== null)
@@ -131,8 +136,26 @@ function fieldTexts(node: HtmlNode, field: string): string[] {
     .filter((value) => value.length > 0);
 }
 
-function inferPrice(card: HtmlNode): string | null {
-  return leafTexts(card).find((text) => PRICE_PATTERN.test(text)) ?? null;
+function inferPrice(texts: readonly string[]): string | null {
+  return texts.find((text) => PRICE_PATTERN.test(text)) ?? null;
+}
+
+function inferTitle(texts: readonly string[], price: string | null): string | null {
+  return texts.find((text) =>
+    text !== price && !/^(?:sponsored|patrocinado|save|guardar)$/iu.test(text)
+  ) ?? null;
+}
+
+function inferLocation(
+  texts: readonly string[],
+  price: string | null,
+  title: string
+): string | null {
+  const titleIndex = texts.indexOf(title);
+  return texts.slice(Math.max(0, titleIndex + 1)).find((text) =>
+    text !== price &&
+    !/^(?:\d[\d., ]*\s*(?:km|mi)|diesel|petrol|gasolina|manual|automatic|automático)$/iu.test(text)
+  ) ?? null;
 }
 
 function leafTexts(node: HtmlNode): string[] {

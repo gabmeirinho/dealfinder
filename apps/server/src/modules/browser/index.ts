@@ -1,4 +1,9 @@
-export type { BrowserAdapter, BrowserSession } from "./adapter.js";
+export type {
+  BrowserAdapter,
+  BrowserSession,
+  MarketplacePageEvidence,
+  MarketplaceResultSnapshot
+} from "./adapter.js";
 export { handleBrowserRequest } from "./http.js";
 export type { BrowserHttpOptions } from "./http.js";
 export {

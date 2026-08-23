@@ -74,6 +74,14 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .browser-actions button { white-space: nowrap; }
 .browser-command-error { grid-column: 1 / -1; margin: -6px 0 0; padding: 10px 14px; color: #7b2f27; background: #f4dfda; font-size: 0.76rem; }
 .browser-privacy { grid-column: 1 / -1; margin: -9px 0 0; color: #68797e; font-size: 0.7rem; line-height: 1.5; }
+.facebook-health { max-width: 1500px; margin: -52px auto 58px; padding: 20px 22px; border-left: 3px solid #7f9790; background: #edf3f0; }
+.facebook-health > div > h2 { margin: 2px 0 6px; color: var(--navy); font-family: var(--display); font-size: 1.35rem; }
+.facebook-health > div > p { margin: 0; color: var(--muted); }
+.facebook-health .eyebrow { font-family: var(--utility); font-size: 0.64rem; letter-spacing: 0.12em; text-transform: uppercase; }
+.facebook-health-paused { border-left-color: #a95b3e; background: #f6e9e2; }
+.facebook-failure { display: grid; gap: 8px; margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(85, 71, 60, 0.2); }
+.facebook-failure p { margin: 0; }
+.facebook-failure .primary-action { justify-self: start; margin-top: 4px; }
 
 .search-manager { max-width: 1500px; margin: 0 auto; }
 .search-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 36px; align-items: end; margin-bottom: 46px; }

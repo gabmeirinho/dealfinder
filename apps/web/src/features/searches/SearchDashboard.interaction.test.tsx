@@ -133,6 +133,7 @@ function createClient(overrides: Partial<SearchApiClient>): SearchApiClient {
     delete: async () => undefined,
     reprioritize: async () => [],
     requestScan: async (id) => ({
+      runId: "run-1",
       searchId: id,
       status: "pending",
       requestedAt: "2026-08-19T12:30:00.000Z"

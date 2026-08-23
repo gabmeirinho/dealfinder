@@ -2,13 +2,17 @@ import { createSettingsMigration } from "./001-create-settings.js";
 import { createSearchesMigration } from "./002-create-searches.js";
 import { createSearchSourcesMigration } from "./003-create-search-sources.js";
 import { createRawCandidatesMigration } from "./004-create-raw-candidates.js";
+import { createScanStateMigration } from "./005-create-scan-state.js";
+import { createFacebookHealthMigration } from "./006-create-facebook-health.js";
 import type { Migration } from "./types.js";
 
 export const allMigrations: readonly Migration[] = [
   createSettingsMigration,
   createSearchesMigration,
   createSearchSourcesMigration,
-  createRawCandidatesMigration
+  createRawCandidatesMigration,
+  createScanStateMigration,
+  createFacebookHealthMigration
 ];
 
 export const LATEST_SCHEMA_VERSION =

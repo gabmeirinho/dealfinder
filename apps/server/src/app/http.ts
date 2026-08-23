@@ -12,11 +12,18 @@ import {
   type SearchVerificationService
 } from "../modules/search-verification/index.js";
 import { handleSearchesRequest } from "../modules/searches/index.js";
+import type { ScanScheduler } from "../modules/scheduler/index.js";
+import {
+  handleFacebookHealthRequest,
+  type FacebookHealthService
+} from "../modules/facebook-health/index.js";
 
 export interface HttpServerOptions {
   database: () => DatabaseConnection;
   browser?: () => BrowserManager;
   searchVerification?: () => SearchVerificationService;
+  scanScheduler?: () => ScanScheduler;
+  facebookHealth?: () => FacebookHealthService;
   staticDirectory?: string;
   now?: () => Date;
 }
@@ -77,9 +84,19 @@ export function createHttpServer(options: HttpServerOptions): Server {
         })
       ) return;
 
+      if (
+        options.facebookHealth !== undefined &&
+        await handleFacebookHealthRequest(request, response, url, {
+          health: options.facebookHealth
+        })
+      ) return;
+
       if (await handleSearchesRequest(request, response, url, {
         database: options.database,
-        now
+        now,
+        ...(options.scanScheduler === undefined
+          ? {}
+          : { scanQueue: options.scanScheduler() })
       })) return;
 
       if ((method === "GET" || method === "HEAD") && staticDirectory !== undefined) {

@@ -26,4 +26,14 @@ export type {
   SaveRawCandidateObservation,
   SavedRawCandidateObservation
 } from "./repositories/raw-candidates.js";
+export { ScanRunsRepository } from "./repositories/scan-runs.js";
+export type {
+  CompleteScanRun,
+  FailScanRun
+} from "./repositories/scan-runs.js";
+export { FacebookHealthRepository } from "./repositories/facebook-health.js";
+export type {
+  CreateAcquisitionPause,
+  CreateDiagnosticArtifact
+} from "./repositories/facebook-health.js";
 export { withTransaction } from "./transactions.js";

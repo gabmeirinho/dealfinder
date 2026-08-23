@@ -2,15 +2,18 @@ import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import type {
   BrowserStatus,
+  FacebookAcquisitionHealth,
   HealthResponse,
   ManagedVehicleSearch
 } from "@dealfinder/domain";
 
 import { BrowserStatusPanel } from "./features/browser/BrowserStatusPanel.js";
 import { SearchDashboard } from "./features/searches/SearchDashboard.js";
+import { FacebookHealthPanel } from "./features/health/FacebookHealthPanel.js";
 import { fetchHealth } from "./health.js";
 import type { BrowserApiClient } from "./lib/api/browser.js";
 import type { SearchApiClient } from "./lib/api/searches.js";
+import type { FacebookHealthApiClient } from "./lib/api/facebook-health.js";
 
 export const appName = "Dealfinder" as const;
 
@@ -26,6 +29,8 @@ export interface AppProps {
   initialSearches?: readonly ManagedVehicleSearch[];
   browserClient?: BrowserApiClient;
   initialBrowserStatus?: BrowserStatus;
+  facebookHealthClient?: FacebookHealthApiClient;
+  initialFacebookHealth?: FacebookAcquisitionHealth;
 }
 
 export function App({
@@ -34,7 +39,9 @@ export function App({
   searchesClient,
   initialSearches,
   browserClient,
-  initialBrowserStatus
+  initialBrowserStatus,
+  facebookHealthClient,
+  initialFacebookHealth
 }: AppProps = {}): ReactElement {
   const [healthState, setHealthState] = useState<HealthState>(
     initialHealth ?? { phase: "loading" }
@@ -80,6 +87,10 @@ export function App({
         <BrowserStatusPanel
           {...(browserClient === undefined ? {} : { client: browserClient })}
           {...(initialBrowserStatus === undefined ? {} : { initialStatus: initialBrowserStatus })}
+        />
+        <FacebookHealthPanel
+          {...(facebookHealthClient === undefined ? {} : { client: facebookHealthClient })}
+          {...(initialFacebookHealth === undefined ? {} : { initialHealth: initialFacebookHealth })}
         />
         <SearchDashboard
           {...(searchesClient === undefined ? {} : { client: searchesClient })}

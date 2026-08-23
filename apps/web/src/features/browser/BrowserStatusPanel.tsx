@@ -22,6 +22,7 @@ const ATTENTION_COPY: Readonly<Record<BrowserAttentionReason, string>> = {
   login_required: "Facebook needs you to sign in manually before acquisition can continue.",
   marketplace_denied: "Marketplace access was denied. Check access in the visible browser before resuming.",
   checkpoint: "Facebook presented a checkpoint. Resolve it manually in the visible browser before resuming.",
+  consent_required: "Facebook needs a manual consent choice in the visible browser before acquisition can resume.",
   launch_failed: "Chromium could not open. Check the local installation, then try resuming."
 };
 

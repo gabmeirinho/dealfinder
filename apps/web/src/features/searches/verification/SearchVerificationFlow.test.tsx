@@ -109,6 +109,7 @@ function searchClient(listed: ManagedVehicleSearch): SearchApiClient {
     delete: async () => undefined,
     reprioritize: async () => [listed],
     requestScan: async () => ({
+      runId: "run-1",
       searchId: listed.id,
       status: "pending",
       requestedAt: "2026-08-20T12:00:00.000Z"

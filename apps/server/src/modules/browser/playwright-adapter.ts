@@ -2,7 +2,11 @@ import { mkdir } from "node:fs/promises";
 
 import { chromium, type BrowserContext, type Page } from "playwright";
 
-import type { BrowserAdapter, BrowserSession } from "./adapter.js";
+import type {
+  BrowserAdapter,
+  BrowserSession,
+  MarketplaceResultSnapshot
+} from "./adapter.js";
 
 export class PlaywrightBrowserAdapter implements BrowserAdapter {
   public async open(profileDirectory: string): Promise<BrowserSession> {
@@ -56,5 +60,52 @@ class PlaywrightBrowserSession implements BrowserSession {
   public onClosed(listener: () => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
+  }
+
+  public async snapshotMarketplaceResults(): Promise<MarketplaceResultSnapshot> {
+    const [cards, atEnd, title, bodyText, html, loadingCount] = await Promise.all([
+      this.#controlledPage
+        .locator('a[href*="/marketplace/item/"]')
+        .evaluateAll((anchors) => anchors.map((anchor) => anchor.outerHTML)),
+      this.#controlledPage.evaluate(() => {
+        const browser = globalThis as unknown as {
+          scrollY: number;
+          innerHeight: number;
+          document: { documentElement: { scrollHeight: number } };
+        };
+        return browser.scrollY + browser.innerHeight >=
+          browser.document.documentElement.scrollHeight - 4;
+      }),
+      this.#controlledPage.title(),
+      this.#controlledPage.locator("body").innerText().catch(() => ""),
+      this.#controlledPage.content(),
+      this.#controlledPage.locator('[aria-busy="true"], [role="progressbar"]').count()
+    ]);
+    return {
+      cards,
+      atEnd,
+      page: {
+        url: this.#controlledPage.url(),
+        title,
+        bodyText: bodyText.slice(0, 100_000),
+        html,
+        loading: loadingCount > 0
+      }
+    };
+  }
+
+  public async scrollMarketplaceResults(): Promise<void> {
+    await this.#controlledPage.evaluate(() => {
+      const browser = globalThis as unknown as {
+        scrollTo(x: number, y: number): void;
+        document: { documentElement: { scrollHeight: number } };
+      };
+      browser.scrollTo(0, browser.document.documentElement.scrollHeight);
+    });
+    await this.#controlledPage.waitForTimeout(750);
+  }
+
+  public async captureDiagnosticScreenshot(): Promise<Uint8Array> {
+    return await this.#controlledPage.screenshot({ type: "png", fullPage: false });
   }
 }

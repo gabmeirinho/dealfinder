@@ -15,6 +15,7 @@ describe("dashboard shell", () => {
     expect(markup).toContain("Checking system");
     expect(markup).toContain("Facebook browser");
     expect(markup).toContain("Checking browser");
+    expect(markup).toContain("Facebook health");
     expect(markup).toContain("Saved searches");
     expect(markup).toContain("Set your first search");
   });
