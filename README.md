@@ -121,6 +121,17 @@ new candidates remain queued. After adding credit, explicitly test it with
 provider balance check succeeds and reports credit available. `GET` on the same
 endpoint reports the persisted pause state.
 
+Deal scores are deterministic and explainable. Each eligible enriched listing
+stores separate contributions for market price position, soft preferences,
+freshness, approximate distance, data completeness, and risk. Comparable
+cohorts require the same make/model, compatible variant, a two-year band, a
+40,000 km mileage band, fuel, and transmission. Price outliers are removed, and
+fewer than five reasonable comparables always reports **Insufficient market
+data** without claiming a discount. Suspiciously low prices reduce confidence,
+apply a risk penalty, and cap the score rather than automatically ranking first.
+`GET /api/searches/:searchId/deal-scores` returns scores in deterministic rank
+order with their confidence, market-data status, cohort, and explanations.
+
 SQLite data is migrated automatically when `openDatabase` opens a connection.
 The database uses foreign-key enforcement, WAL journaling for file-backed
 connections, atomic migration records, and UTC ISO-8601 text timestamps. The

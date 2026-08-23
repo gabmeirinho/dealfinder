@@ -18,6 +18,7 @@ export interface DeepSeekEnrichmentServiceOptions {
   enabled: boolean;
   logger: Logger;
   now?: () => Date;
+  afterEnrichment?: (listingId: number, completedAt: string) => void | Promise<void>;
 }
 
 export class DeepSeekEnrichmentService {
@@ -26,6 +27,7 @@ export class DeepSeekEnrichmentService {
   readonly #enabled: boolean;
   readonly #logger: Logger;
   readonly #now: () => Date;
+  readonly #afterEnrichment: DeepSeekEnrichmentServiceOptions["afterEnrichment"];
 
   public constructor(options: DeepSeekEnrichmentServiceOptions) {
     this.#database = options.database;
@@ -33,6 +35,7 @@ export class DeepSeekEnrichmentService {
     this.#enabled = options.enabled;
     this.#logger = options.logger;
     this.#now = options.now ?? (() => new Date());
+    this.#afterEnrichment = options.afterEnrichment;
   }
 
   public async processNext(): Promise<EnrichmentProcessResult> {
@@ -61,6 +64,16 @@ export class DeepSeekEnrichmentService {
       const advanced = database.enrichmentProcessing.completeSuccess(
         claim, result.enrichment, completedAt, result.providerRequestId
       );
+      if (advanced && this.#afterEnrichment !== undefined) {
+        try {
+          await this.#afterEnrichment(claim.listingId, completedAt);
+        } catch {
+          this.#logger.error(
+            "Deal score recomputation failed after enrichment",
+            safeContext(claim, "score_recomputation_failed")
+          );
+        }
+      }
       this.#logger.info("DeepSeek enrichment completed", safeContext(claim, advanced ? "succeeded" : "superseded"));
       return advanced ? "succeeded" : "retry_queued";
     } catch (error: unknown) {

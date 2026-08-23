@@ -70,4 +70,6 @@ export type {
   ProcessingQueueState,
   StoredEnrichment
 } from "./repositories/enrichment-processing.js";
+export { DealScoresRepository } from "./repositories/deal-scores.js";
+export type { StoredDealScore } from "./repositories/deal-scores.js";
 export { withTransaction } from "./transactions.js";

@@ -21,6 +21,7 @@ import {
   handleDeepSeekRequest,
   type DeepSeekCreditController
 } from "../integrations/deepseek/index.js";
+import { handleDealScoresRequest } from "../modules/scoring/index.js";
 
 export interface HttpServerOptions {
   database: () => DatabaseConnection;
@@ -103,6 +104,10 @@ export function createHttpServer(options: HttpServerOptions): Server {
           worker: options.deepseek
         })
       ) return;
+
+      if (await handleDealScoresRequest(request, response, url, {
+        database: options.database
+      })) return;
 
       if (await handleSearchesRequest(request, response, url, {
         database: options.database,

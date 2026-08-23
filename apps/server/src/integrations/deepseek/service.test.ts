@@ -33,7 +33,13 @@ describe("DeepSeek enrichment service", () => {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify(completion(value)));
     });
-    const { service, listingIds } = setupService(url, ["100000000000001", "100000000000002"]);
+    const scored: number[] = [];
+    const { service, listingIds } = setupService(
+      url,
+      ["100000000000001", "100000000000002"],
+      [],
+      (listingId) => { scored.push(listingId); }
+    );
 
     await expect(service.processNext()).resolves.toBe("succeeded");
     await expect(service.processNext()).resolves.toBe("failed");
@@ -41,6 +47,7 @@ describe("DeepSeek enrichment service", () => {
     expect(database!.enrichmentProcessing.getEnrichment(listingIds[0]!)).toBeDefined();
     expect(database!.enrichmentProcessing.getQueueItem(listingIds[1]!)?.state).toBe("failed");
     expect(database!.enrichmentProcessing.getEnrichment(listingIds[1]!)).toBeUndefined();
+    expect(scored).toEqual([listingIds[0]]);
   });
 
   it("keeps Facebook collection active during a credit pause and requires a successful credit test", async () => {
@@ -114,7 +121,12 @@ describe("DeepSeek enrichment service", () => {
     });
   }
 
-  function setupService(baseUrl: string, sourceIds: string[], logs: string[] = []) {
+  function setupService(
+    baseUrl: string,
+    sourceIds: string[],
+    logs: string[] = [],
+    afterEnrichment?: (listingId: number, completedAt: string) => void
+  ) {
     database = openDatabase({ filename: ":memory:" });
     const draft = createVehicleSearchDraft("BMW search");
     draft.criteria.makeKeywords = { value: ["BMW"], strength: "hard" };
@@ -130,7 +142,8 @@ describe("DeepSeek enrichment service", () => {
       client,
       enabled: true,
       logger,
-      now: () => new Date("2026-08-23T10:10:00.000Z")
+      now: () => new Date("2026-08-23T10:10:00.000Z"),
+      ...(afterEnrichment === undefined ? {} : { afterEnrichment })
     });
     return { service, listingIds, ingestion, searchId: search.id };
   }

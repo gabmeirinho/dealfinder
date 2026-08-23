@@ -43,6 +43,9 @@ export class CorrectionsService {
       );
       this.reassess(database, input.listingId, facts, input.correctedAt);
       database.enrichmentProcessing.enqueue(input.listingId, input.correctedAt);
+      for (const searchId of database.listings.listSearchIds(input.listingId)) {
+        database.dealScores.delete(input.listingId, searchId);
+      }
       return { correction, facts };
     });
   }

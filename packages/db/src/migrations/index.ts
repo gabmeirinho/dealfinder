@@ -8,6 +8,7 @@ import { createListingLifecycleMigration } from "./007-create-listing-lifecycle.
 import { createNormalizedVehicleFactsMigration } from "./008-create-normalized-vehicle-facts.js";
 import { createGeocodingCacheMigration } from "./009-create-geocoding-cache.js";
 import { createEnrichmentProcessingMigration } from "./010-create-enrichment-processing.js";
+import { createDealScoresMigration } from "./011-create-deal-scores.js";
 import type { Migration } from "./types.js";
 
 export const allMigrations: readonly Migration[] = [
@@ -20,7 +21,8 @@ export const allMigrations: readonly Migration[] = [
   createListingLifecycleMigration,
   createNormalizedVehicleFactsMigration,
   createGeocodingCacheMigration,
-  createEnrichmentProcessingMigration
+  createEnrichmentProcessingMigration,
+  createDealScoresMigration
 ];
 
 export const LATEST_SCHEMA_VERSION =

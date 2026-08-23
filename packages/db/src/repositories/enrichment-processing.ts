@@ -335,13 +335,14 @@ export class EnrichmentProcessingRepository {
       FROM listing_enrichments WHERE listing_id = ?
     `).get(listingId) as unknown as EnrichmentRow | undefined;
     if (row === undefined) return undefined;
-    return {
-      listingId: row.listing_id,
-      requestId: row.request_id,
-      sourceNormalizedAt: row.source_normalized_at,
-      enrichment: validateVehicleEnrichment(JSON.parse(row.enrichment_json) as unknown),
-      enrichedAt: row.enriched_at
-    };
+    return mapEnrichment(row);
+  }
+
+  public listEnrichments(): StoredEnrichment[] {
+    return (this.database.prepare(`
+      SELECT listing_id, request_id, source_normalized_at, enrichment_json, enriched_at
+      FROM listing_enrichments ORDER BY listing_id ASC
+    `).all() as unknown as EnrichmentRow[]).map(mapEnrichment);
   }
 
   private finishRequest(
@@ -359,6 +360,16 @@ export class EnrichmentProcessingRepository {
     `).run(status, httpStatus, providerRequestId, errorCode, completedAt, requestId);
     if (Number(result.changes) !== 1) throw new Error("Enrichment request is not running");
   }
+}
+
+function mapEnrichment(row: EnrichmentRow): StoredEnrichment {
+  return {
+    listingId: row.listing_id,
+    requestId: row.request_id,
+    sourceNormalizedAt: row.source_normalized_at,
+    enrichment: validateVehicleEnrichment(JSON.parse(row.enrichment_json) as unknown),
+    enrichedAt: row.enriched_at
+  };
 }
 
 function timestamp(value: string, label: string): void {

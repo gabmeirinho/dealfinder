@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { LATEST_SCHEMA_VERSION, openDatabase } from "@dealfinder/db";
+import { createVehicleSearchDraft } from "@dealfinder/domain";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -95,5 +96,22 @@ describe("localhost HTTP server", () => {
     const succeeded = await fetch(`${baseUrl}/api/integrations/deepseek/credit`, { method: "POST" });
     expect(succeeded.status).toBe(200);
     expect(await succeeded.json()).toMatchObject({ available: true });
+  });
+
+  it("exposes deterministic deal scores for a saved search", async () => {
+    const database = openDatabase({ filename: ":memory:" });
+    const draft = createVehicleSearchDraft("BMW deals");
+    draft.criteria.makeKeywords = { value: ["BMW"], strength: "hard" };
+    const search = database.searches.create(draft);
+    const server = createHttpServer({ database: () => database });
+    cleanup.push(() => database.close(), () => closeHttpServer(server));
+    const address = await listenHttpServer(server, { host: "127.0.0.1", port: 0 });
+
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/api/searches/${search.id}/deal-scores`
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ scores: [] });
   });
 });

@@ -16,6 +16,7 @@ import { NormalizedVehiclesRepository } from "./repositories/normalized-vehicles
 import { CorrectionsRepository } from "./repositories/corrections.js";
 import { GeocodingRepository } from "./repositories/geocoding.js";
 import { EnrichmentProcessingRepository } from "./repositories/enrichment-processing.js";
+import { DealScoresRepository } from "./repositories/deal-scores.js";
 import { withTransaction } from "./transactions.js";
 
 export interface OpenDatabaseOptions {
@@ -39,6 +40,7 @@ export interface DatabaseConnection {
   readonly corrections: CorrectionsRepository;
   readonly geocoding: GeocodingRepository;
   readonly enrichmentProcessing: EnrichmentProcessingRepository;
+  readonly dealScores: DealScoresRepository;
   transaction<T>(operation: () => T): T;
   close(): void;
 }
@@ -83,6 +85,7 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseConnection {
     const corrections = new CorrectionsRepository(database);
     const geocoding = new GeocodingRepository(database);
     const enrichmentProcessing = new EnrichmentProcessingRepository(database);
+    const dealScores = new DealScoresRepository(database);
     let closed = false;
 
     return {
@@ -100,6 +103,7 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseConnection {
       corrections,
       geocoding,
       enrichmentProcessing,
+      dealScores,
       transaction: <T>(operation: () => T) => withTransaction(database, operation),
       close: () => {
         if (closed) return;

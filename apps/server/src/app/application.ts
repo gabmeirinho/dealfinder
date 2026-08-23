@@ -27,6 +27,7 @@ import {
   DeepSeekEnrichmentService,
   DeepSeekEnrichmentWorker
 } from "../integrations/deepseek/index.js";
+import { DealScoringService } from "../modules/scoring/index.js";
 
 export interface ApplicationOptions {
   config: ServerConfig;
@@ -40,6 +41,7 @@ export interface ApplicationRuntime {
   readonly browser: BrowserManager;
   readonly scheduler: ScanScheduler;
   readonly enrichment: DeepSeekEnrichmentWorker;
+  readonly scoring: DealScoringService;
   readonly server: Server;
   readonly address: BoundAddress | undefined;
   start(): Promise<BoundAddress>;
@@ -83,11 +85,15 @@ export function createApplicationRuntime(
       baseUrl: options.config.deepseek.baseUrl
     })
     : undefined;
+  const scoring = new DealScoringService({ database: getDatabase });
   const enrichmentService = new DeepSeekEnrichmentService({
     database: getDatabase,
     ...(deepseekClient === undefined ? {} : { client: deepseekClient }),
     enabled: options.config.deepseek.enabled,
-    logger
+    logger,
+    afterEnrichment: (_listingId, completedAt) => {
+      scoring.recomputeAll(completedAt);
+    }
   });
   const enrichment = new DeepSeekEnrichmentWorker({
     database: getDatabase,
@@ -142,6 +148,13 @@ export function createApplicationRuntime(
       stop: () => browser.shutdown()
     },
     {
+      name: "deal-scoring",
+      start: () => {
+        scoring.recomputeAll(new Date().toISOString());
+      },
+      stop: () => undefined
+    },
+    {
       name: "deepseek-enrichment",
       start: () => {
         if (options.config.deepseek.enabled) enrichment.start();
@@ -172,6 +185,7 @@ export function createApplicationRuntime(
     browser,
     scheduler,
     enrichment,
+    scoring,
     server,
     get address() {
       return address;
