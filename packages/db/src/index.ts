@@ -44,4 +44,16 @@ export type {
   ListingEvent,
   ListingPricePoint
 } from "./repositories/listings.js";
+export { NormalizedVehiclesRepository } from "./repositories/normalized-vehicles.js";
+export type {
+  StoredMatchEvaluation,
+  StoredNormalizedVehicle,
+  StoredRiskAssessment
+} from "./repositories/normalized-vehicles.js";
+export { CorrectionsRepository } from "./repositories/corrections.js";
+export type {
+  ListingCorrection,
+  NormalizationRuleProposal,
+  RuleProposalStatus
+} from "./repositories/corrections.js";
 export { withTransaction } from "./transactions.js";

@@ -302,6 +302,12 @@ export class ListingsRepository {
     `).all(listingId) as unknown as EventRow[]).map(mapEvent);
   }
 
+  public listSearchIds(listingId: number): string[] {
+    return (this.database.prepare(`
+      SELECT search_id FROM listing_searches WHERE listing_id = ? ORDER BY search_id ASC
+    `).all(listingId) as unknown as Array<{ search_id: string }>).map((row) => row.search_id);
+  }
+
   private createFromObservation(input: IngestListingObservation): IngestedListingObservation {
     const lifecycle = createListingLifecycle(input.observedAt, input.explicitlySold);
     const discoveryKind: ListingDiscoveryKind = input.initialScan ? "initial_backlog" : "monitoring";

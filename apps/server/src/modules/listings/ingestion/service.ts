@@ -1,14 +1,25 @@
 import type { DatabaseConnection, Listing, ListingEvent } from "@dealfinder/db";
+import {
+  applyFactCorrections,
+  applyReusableRules,
+  assessVehicleRisk,
+  evaluateVehicleMatch,
+  normalizeEuroPrice,
+  normalizeVehicleFacts,
+  type CoarseSellerSignals
+} from "@dealfinder/domain";
 
 export interface RawListingObservation {
   source: "facebook";
   sourceListingId: string;
   url: string;
   title: string;
+  description?: string | null;
   displayedPrice: string | null;
   location: string | null;
   thumbnailUrl: string | null;
   rawCardFacts: readonly string[];
+  seller?: Partial<CoarseSellerSignals>;
   explicitlySold?: boolean;
 }
 
@@ -47,6 +58,9 @@ export class ListingIngestionService {
       const listings: Listing[] = [];
       const events: ListingEvent[] = [];
       const observedListingIds = new Set<number>();
+      const approvedRules = database.corrections.listApprovedRules();
+      const search = database.searches.get(input.searchId);
+      if (search === undefined) throw new Error(`Search not found during normalization: ${input.searchId}`);
       let observationsInserted = 0;
       let listingsCreated = 0;
       let priceChanges = 0;
@@ -68,7 +82,7 @@ export class ListingIngestionService {
           listingUrl: candidate.url,
           title: candidate.title,
           displayedPrice: candidate.displayedPrice,
-          priceCents: parseDisplayedEuroPrice(candidate.displayedPrice),
+          priceCents: normalizeEuroPrice(candidate.displayedPrice),
           ...(candidate.explicitlySold === undefined
             ? {}
             : { explicitlySold: candidate.explicitlySold })
@@ -78,6 +92,36 @@ export class ListingIngestionService {
         if (ingested.created) listingsCreated += 1;
         if (ingested.priceChanged) priceChanges += 1;
         if (ingested.event !== null) events.push(ingested.event);
+
+        const normalized = applyReusableRules(normalizeVehicleFacts({
+          title: candidate.title,
+          description: candidate.description ?? null,
+          displayedPrice: candidate.displayedPrice,
+          cardFacts: candidate.rawCardFacts,
+          referenceYear: new Date(input.observedAt).getUTCFullYear(),
+          ...(candidate.seller === undefined ? {} : { seller: candidate.seller })
+        }), approvedRules);
+        database.normalizedVehicles.saveFacts(
+          ingested.listing.id,
+          raw.observation.id,
+          normalized,
+          input.observedAt
+        );
+        const effective = applyFactCorrections(
+          normalized,
+          database.corrections.listForListing(ingested.listing.id)
+        );
+        database.normalizedVehicles.saveRisk(
+          ingested.listing.id,
+          assessVehicleRisk(effective),
+          input.observedAt
+        );
+        database.normalizedVehicles.saveMatch(
+          ingested.listing.id,
+          input.searchId,
+          evaluateVehicleMatch(effective, search.criteria),
+          input.observedAt
+        );
       }
 
       const missed = input.completeSnapshot
@@ -102,23 +146,9 @@ export class ListingIngestionService {
   }
 }
 
-/** Conservative card-price parsing; richer normalization belongs to P4-C2. */
+/** Backwards-compatible entry point retained for the listing-lifecycle module. */
 export function parseDisplayedEuroPrice(displayedPrice: string | null): number | null {
-  if (displayedPrice === null) return null;
-  const normalized = displayedPrice.normalize("NFKC").trim();
-  if (/^(?:free|gr[aá]tis|gratuito)$/iu.test(normalized)) return 0;
-  if (!normalized.includes("€")) return null;
-  const numeric = normalized.replace(/[^\d.,]/gu, "");
-  if (numeric === "") return null;
-
-  const separator = Math.max(numeric.lastIndexOf(","), numeric.lastIndexOf("."));
-  const decimalDigits = separator < 0 ? 0 : numeric.length - separator - 1;
-  const hasCents = decimalDigits === 2;
-  const eurosText = (hasCents ? numeric.slice(0, separator) : numeric).replace(/[^\d]/gu, "");
-  const centsText = hasCents ? numeric.slice(separator + 1) : "00";
-  if (eurosText === "") return null;
-  const cents = Number(eurosText) * 100 + Number(centsText);
-  return Number.isSafeInteger(cents) ? cents : null;
+  return normalizeEuroPrice(displayedPrice);
 }
 
 function replayedResult(): ListingScanIngestionResult {
