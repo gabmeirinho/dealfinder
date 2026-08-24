@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-19T22:16:01Z",
+  "title": "Design System: Dealfinder",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "neutral",
+        "displayName": "Carbon Ink",
+        "canonical": "#172126",
+        "tonalRamp": ["color-mix(in oklch, #172126 88%, black)", "#172126", "color-mix(in oklch, #172126 82%, white)", "color-mix(in oklch, #172126 65%, white)", "color-mix(in oklch, #172126 48%, white)", "color-mix(in oklch, #172126 31%, white)", "color-mix(in oklch, #172126 16%, white)", "color-mix(in oklch, #172126 6%, white)"]
+      },
+      "navy": {
+        "role": "primary",
+        "displayName": "Ledger Navy",
+        "canonical": "#102735",
+        "tonalRamp": ["color-mix(in oklch, #102735 88%, black)", "#102735", "color-mix(in oklch, #102735 82%, white)", "color-mix(in oklch, #102735 65%, white)", "color-mix(in oklch, #102735 48%, white)", "color-mix(in oklch, #102735 31%, white)", "color-mix(in oklch, #102735 16%, white)", "color-mix(in oklch, #102735 6%, white)"]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Cool Paper",
+        "canonical": "#f5f8f6",
+        "tonalRamp": ["color-mix(in oklch, #f5f8f6 18%, black)", "color-mix(in oklch, #f5f8f6 32%, black)", "color-mix(in oklch, #f5f8f6 48%, black)", "color-mix(in oklch, #f5f8f6 66%, black)", "color-mix(in oklch, #f5f8f6 82%, black)", "#f5f8f6", "color-mix(in oklch, #f5f8f6 72%, white)", "color-mix(in oklch, #f5f8f6 35%, white)"]
+      },
+      "mist": {
+        "role": "neutral",
+        "displayName": "Sea Mist",
+        "canonical": "#d7e3df",
+        "tonalRamp": ["color-mix(in oklch, #d7e3df 18%, black)", "color-mix(in oklch, #d7e3df 32%, black)", "color-mix(in oklch, #d7e3df 48%, black)", "color-mix(in oklch, #d7e3df 66%, black)", "#d7e3df", "color-mix(in oklch, #d7e3df 68%, white)", "color-mix(in oklch, #d7e3df 42%, white)", "color-mix(in oklch, #d7e3df 18%, white)"]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Ruled Line",
+        "canonical": "#b8c8c3",
+        "tonalRamp": ["color-mix(in oklch, #b8c8c3 20%, black)", "color-mix(in oklch, #b8c8c3 35%, black)", "color-mix(in oklch, #b8c8c3 52%, black)", "color-mix(in oklch, #b8c8c3 72%, black)", "#b8c8c3", "color-mix(in oklch, #b8c8c3 68%, white)", "color-mix(in oklch, #b8c8c3 42%, white)", "color-mix(in oklch, #b8c8c3 18%, white)"]
+      },
+      "coast": {
+        "role": "secondary",
+        "displayName": "Coastal Teal",
+        "canonical": "#397079",
+        "tonalRamp": ["color-mix(in oklch, #397079 74%, black)", "color-mix(in oklch, #397079 88%, black)", "#397079", "color-mix(in oklch, #397079 78%, white)", "color-mix(in oklch, #397079 60%, white)", "color-mix(in oklch, #397079 42%, white)", "color-mix(in oklch, #397079 24%, white)", "color-mix(in oklch, #397079 10%, white)"]
+      },
+      "signal": {
+        "role": "primary",
+        "displayName": "Signal Coral",
+        "canonical": "#ef704f",
+        "tonalRamp": ["color-mix(in oklch, #ef704f 55%, black)", "color-mix(in oklch, #ef704f 72%, black)", "color-mix(in oklch, #ef704f 88%, black)", "#ef704f", "color-mix(in oklch, #ef704f 78%, white)", "color-mix(in oklch, #ef704f 58%, white)", "color-mix(in oklch, #ef704f 35%, white)", "color-mix(in oklch, #ef704f 15%, white)"]
+      },
+      "success": {
+        "role": "tertiary",
+        "displayName": "Local Green",
+        "canonical": "#27875d",
+        "tonalRamp": ["color-mix(in oklch, #27875d 62%, black)", "color-mix(in oklch, #27875d 78%, black)", "color-mix(in oklch, #27875d 90%, black)", "#27875d", "color-mix(in oklch, #27875d 76%, white)", "color-mix(in oklch, #27875d 55%, white)", "color-mix(in oklch, #27875d 32%, white)", "color-mix(in oklch, #27875d 13%, white)"]
+      },
+      "warning": {
+        "role": "tertiary",
+        "displayName": "Caution Ochre",
+        "canonical": "#a86224",
+        "tonalRamp": ["color-mix(in oklch, #a86224 62%, black)", "color-mix(in oklch, #a86224 78%, black)", "color-mix(in oklch, #a86224 90%, black)", "#a86224", "color-mix(in oklch, #a86224 76%, white)", "color-mix(in oklch, #a86224 55%, white)", "color-mix(in oklch, #a86224 32%, white)", "color-mix(in oklch, #a86224 13%, white)"]
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Destructive Brick",
+        "canonical": "#a43e32",
+        "tonalRamp": ["color-mix(in oklch, #a43e32 62%, black)", "color-mix(in oklch, #a43e32 78%, black)", "color-mix(in oklch, #a43e32 90%, black)", "#a43e32", "color-mix(in oklch, #a43e32 76%, white)", "color-mix(in oklch, #a43e32 55%, white)", "color-mix(in oklch, #a43e32 32%, white)", "color-mix(in oklch, #a43e32 13%, white)"]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted Slate",
+        "canonical": "#596a70",
+        "tonalRamp": ["color-mix(in oklch, #596a70 68%, black)", "color-mix(in oklch, #596a70 84%, black)", "#596a70", "color-mix(in oklch, #596a70 80%, white)", "color-mix(in oklch, #596a70 62%, white)", "color-mix(in oklch, #596a70 43%, white)", "color-mix(in oklch, #596a70 25%, white)", "color-mix(in oklch, #596a70 10%, white)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Ledger Display", "purpose": "Page titles only; condensed, tightly tracked, and visually dominant." },
+      "headline": { "displayName": "Decision Headline", "purpose": "Editor and confirmation titles." },
+      "title": { "displayName": "Record Title", "purpose": "Form sections and saved-search names." },
+      "body": { "displayName": "Working Copy", "purpose": "Instructions, criteria summaries, and explanations." },
+      "label": { "displayName": "Operational Label", "purpose": "Capacity, state, metadata, constraint strength, and tabular measurements." }
+    },
+    "shadows": [
+      { "name": "editor-lift", "value": "-18px 0 50px rgba(8, 25, 34, 0.22)", "purpose": "Separates the right-side editor sheet from its scrim." },
+      { "name": "decision-lift", "value": "0 18px 55px rgba(4, 19, 27, 0.28)", "purpose": "Isolates consequential confirmation dialogs." },
+      { "name": "status-halo", "value": "0 0 0 4px rgba(123, 214, 165, 0.13)", "purpose": "Makes tiny healthy-state dots legible without lifting their container." }
+    ],
+    "motion": [
+      { "name": "state-standard", "value": "180ms ease-out", "purpose": "Button, row, and switch state changes." },
+      { "name": "scrim-in", "value": "220ms ease-out", "purpose": "Introduces the editor scrim." },
+      { "name": "capacity-progress", "value": "350ms cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Updates the active-search capacity rail." },
+      { "name": "sheet-in", "value": "360ms cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "Brings the editor sheet in from the right." },
+      { "name": "status-pulse", "value": "1.2s ease-in-out infinite", "purpose": "Signals loading without moving surrounding layout." }
+    ],
+    "breakpoints": [
+      { "name": "ledger-actions", "value": "1180px" },
+      { "name": "compact-shell", "value": "900px" },
+      { "name": "narrow-workspace", "value": "700px" },
+      { "name": "small-handset", "value": "440px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The square, navy action used for creating and committing changes.",
+      "html": "<button class=\"ds-btn-primary\">NEW SEARCH</button>",
+      "css": ".ds-btn-primary { min-height: 46px; padding: 12px 18px; color: var(--paper, #f5f8f6); background: var(--navy, #102735); border: 0; border-radius: 0; cursor: pointer; font-family: \"Avenir Next\", \"Segoe UI\", sans-serif; font-weight: 700; transition: background 180ms ease-out; } .ds-btn-primary:hover { background: var(--coast, #397079); } .ds-btn-primary:focus-visible { outline: 3px solid var(--signal, #ef704f); outline-offset: 3px; } .ds-btn-primary:active { background: var(--navy, #102735); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A bordered cancel or alternative action that stays subordinate to the primary button.",
+      "html": "<button class=\"ds-btn-secondary\">CANCEL</button>",
+      "css": ".ds-btn-secondary { min-height: 44px; padding: 11px 17px; color: var(--navy, #102735); background: transparent; border: 1px solid #94aaa4; border-radius: 0; cursor: pointer; font-family: \"Avenir Next\", \"Segoe UI\", sans-serif; font-weight: 700; transition: background 180ms ease-out; } .ds-btn-secondary:hover { background: var(--mist, #d7e3df); } .ds-btn-secondary:focus-visible { outline: 3px solid var(--signal, #ef704f); outline-offset: 3px; } .ds-btn-secondary:active { background: #c9d7d2; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "The confirmed destructive action, never a routine row action.",
+      "html": "<button class=\"ds-btn-danger\">DELETE SEARCH</button>",
+      "css": ".ds-btn-danger { min-height: 44px; padding: 11px 17px; color: #fff; background: var(--danger, #a43e32); border: 0; border-radius: 0; cursor: pointer; font-family: \"Avenir Next\", \"Segoe UI\", sans-serif; font-weight: 700; transition: filter 180ms ease-out; } .ds-btn-danger:hover { filter: brightness(0.9); } .ds-btn-danger:focus-visible { outline: 3px solid var(--signal, #ef704f); outline-offset: 3px; } .ds-btn-danger:active { filter: brightness(0.82); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "A square, high-contrast field for canonical search criteria.",
+      "html": "<label class=\"ds-field\"><span>SEARCH NAME</span><input type=\"text\" placeholder=\"Lisbon family hatchback\"></label>",
+      "css": ".ds-field { display: grid; gap: 8px; color: var(--navy, #102735); font-family: \"Avenir Next\", \"Segoe UI\", sans-serif; font-size: 0.75rem; font-weight: 700; } .ds-field input { min-height: 43px; padding: 9px 11px; color: var(--ink, #172126); background: #fff; border: 1px solid #9db1ab; border-radius: 0; caret-color: var(--signal, #ef704f); font: inherit; font-size: 1rem; font-weight: 400; } .ds-field input:hover { border-color: var(--coast, #397079); } .ds-field input:focus-visible { outline: 3px solid var(--signal, #ef704f); outline-offset: 3px; }"
+    },
+    {
+      "name": "Selected Choice Chip",
+      "kind": "chip",
+      "refersTo": "chip-selected",
+      "description": "A square selected option for fuel or transmission constraints.",
+      "html": "<button class=\"ds-choice-chip\" aria-pressed=\"true\">HYBRID</button>",
+      "css": ".ds-choice-chip { padding: 8px 10px; color: var(--paper, #f5f8f6); background: var(--coast, #397079); border: 1px solid var(--coast, #397079); border-radius: 0; cursor: pointer; font-family: \"Avenir Next\", \"Segoe UI\", sans-serif; font-size: 0.71rem; } .ds-choice-chip:hover { filter: brightness(0.94); } .ds-choice-chip:focus-visible { outline: 3px solid var(--signal, #ef704f); outline-offset: 2px; } .ds-choice-chip:active { filter: brightness(0.86); }"
+    },
+    {
+      "name": "Active State Badge",
+      "kind": "chip",
+      "refersTo": "state-badge-active",
+      "description": "A read-only pill that pairs state color with a literal label.",
+      "html": "<span class=\"ds-state-badge\"><i></i>ACTIVE</span>",
+      "css": ".ds-state-badge { display: inline-flex; gap: 7px; align-items: center; padding: 5px 9px; color: #166142; background: #dceee5; border-radius: 999px; font-family: ui-monospace, \"SFMono-Regular\", Consolas, monospace; font-size: 0.63rem; text-transform: uppercase; } .ds-state-badge i { width: 6px; height: 6px; background: var(--success, #27875d); border-radius: 50%; }"
+    },
+    {
+      "name": "Primary Navigation",
+      "kind": "nav",
+      "description": "The navy shell navigation with a coral current-location signal.",
+      "html": "<nav class=\"ds-nav\"><a href=\"#\" aria-current=\"page\">Searches</a><span aria-disabled=\"true\">Inbox</span></nav>",
+      "css": ".ds-nav { display: grid; gap: 7px; padding: 24px; color: #bdceca; background: var(--navy, #102735); font-family: \"Avenir Next\", \"Segoe UI\", sans-serif; } .ds-nav a, .ds-nav span { position: relative; padding: 9px 0 9px 18px; color: inherit; font-size: 0.85rem; text-decoration: none; } .ds-nav a::before, .ds-nav span::before { position: absolute; top: 50%; left: 0; width: 5px; height: 5px; background: #5f7b80; border-radius: 50%; content: \"\"; transform: translateY(-50%); } .ds-nav a:hover, .ds-nav a[aria-current=\"page\"] { color: #fff; } .ds-nav a[aria-current=\"page\"]::before { background: var(--signal, #ef704f); box-shadow: 0 0 0 4px rgba(239,112,79,.15); } .ds-nav a:focus-visible { outline: 3px solid var(--signal, #ef704f); outline-offset: 3px; } .ds-nav span[aria-disabled=\"true\"] { color: #70898d; }"
+    },
+    {
+      "name": "Search Ledger Row",
+      "kind": "card",
+      "description": "A ruled saved-search record organized by a persistent priority spine.",
+      "html": "<article class=\"ds-search-row\"><div class=\"ds-priority\">01</div><div class=\"ds-record\"><h3>Lisbon hatchback</h3><p>Petrol or hybrid · up to 80,000 km · €18,000</p></div><dl><dt>STATUS</dt><dd>Verified</dd></dl></article>",
+      "css": ".ds-search-row { display: grid; grid-template-columns: 92px minmax(220px, 1fr) minmax(160px, .55fr); min-height: 150px; color: var(--ink, #172126); background: rgba(245,248,246,.93); border-top: 3px solid var(--navy, #102735); border-bottom: 1px solid var(--line, #b8c8c3); font-family: \"Avenir Next\", \"Segoe UI\", sans-serif; transition: background 180ms ease-out; } .ds-search-row:hover { background: #fff; } .ds-priority { display: grid; place-items: center; color: var(--paper, #f5f8f6); background: var(--navy, #102735); font-family: ui-monospace, \"SFMono-Regular\", Consolas, monospace; font-size: 1.4rem; font-variant-numeric: tabular-nums; } .ds-record { padding: 28px 32px; border-right: 1px solid #d2ded9; } .ds-record h3 { margin: 0; color: var(--navy, #102735); font-family: \"Arial Narrow\", \"Aptos Narrow\", \"Roboto Condensed\", sans-serif; font-size: 1.8rem; letter-spacing: -.03em; } .ds-record p { margin: 20px 0 0; color: #41545b; font-size: .88rem; line-height: 1.55; } .ds-search-row dl { display: grid; align-content: center; gap: 8px; margin: 0; padding: 26px; } .ds-search-row dt { color: #74847f; font-family: ui-monospace, \"SFMono-Regular\", Consolas, monospace; font-size: .63rem; } .ds-search-row dd { margin: 0; color: var(--success, #27875d); font-size: .76rem; }"
+    },
+    {
+      "name": "Editor Sheet",
+      "kind": "custom",
+      "description": "The elevated right-side surface for creating or editing a search.",
+      "html": "<aside class=\"ds-editor\"><header><h2>New search</h2><button aria-label=\"Close\">×</button></header><section><h3>Identity</h3><p>Name and activate this search.</p></section></aside>",
+      "css": ".ds-editor { width: min(520px, 100%); min-height: 300px; color: var(--ink, #172126); background: var(--paper, #f5f8f6); box-shadow: -18px 0 50px rgba(8,25,34,.22); font-family: \"Avenir Next\", \"Segoe UI\", sans-serif; } .ds-editor header { display: flex; align-items: center; justify-content: space-between; padding: 26px 32px; color: var(--paper, #f5f8f6); background: var(--navy, #102735); } .ds-editor h2, .ds-editor h3 { margin: 0; font-family: \"Arial Narrow\", \"Aptos Narrow\", \"Roboto Condensed\", sans-serif; letter-spacing: -.03em; } .ds-editor h2 { font-size: 2rem; } .ds-editor header button { display: grid; width: 42px; height: 42px; place-items: center; color: inherit; background: transparent; border: 1px solid rgba(245,248,246,.25); border-radius: 0; cursor: pointer; font-size: 1.4rem; } .ds-editor header button:hover { border-color: var(--signal, #ef704f); } .ds-editor header button:focus-visible { outline: 3px solid var(--signal, #ef704f); outline-offset: 3px; } .ds-editor section { display: grid; grid-template-columns: 150px 1fr; gap: 32px; padding: 42px 32px; border-bottom: 1px solid var(--line, #b8c8c3); } .ds-editor h3 { color: var(--navy, #102735); font-size: 1.35rem; } .ds-editor p { margin: 0; color: var(--muted, #596a70); font-size: .75rem; line-height: 1.55; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Search Ledger",
+    "overview": "Dealfinder feels like a private operational ledger: quiet enough for sustained desktop work, exact enough for consequential search criteria, and local rather than corporate. Navy framing establishes the control desk; cool paper surfaces and a faint 28px ruling keep the workspace legible and tactile without turning it decorative.\n\nThe interface is dense but not compressed. Large condensed headings establish location, monospace labels carry machine state and measured values, and ordinary body copy remains calm and readable. Sharp dividers, flat surfaces, and a meaningful priority spine organize the work; signal coral is reserved for focus, capacity, priority, and states that deserve attention.",
+    "keyCharacteristics": [
+      "Navy shell around a cool ruled-paper workspace.",
+      "Condensed display type paired with practical sans-serif body copy and monospace telemetry.",
+      "Flat, square operational surfaces separated by lines rather than cards and shadows.",
+      "A dark priority spine that makes ordering part of the information architecture.",
+      "Coral signal marks used sparingly for consequential state and interaction."
+    ],
+    "rules": [
+      { "name": "The Signal Means Something Rule", "body": "Use coral only for focus, priority, capacity, hard constraints, loading, or attention; it is not a general decoration color.", "section": "colors" },
+      { "name": "The State Colors Stay Literal Rule", "body": "Green confirms readiness, ochre asks for caution, and brick marks error or destruction. Do not exchange those meanings.", "section": "colors" },
+      { "name": "The Three-Voice Rule", "body": "Condensed type names the work, body type explains it, and monospace type reports state or measurements.", "section": "typography" },
+      { "name": "The Ruled Surface Rule", "body": "Establish hierarchy with grid tracks and 1px dividers; reserve the 3px navy rule for the beginning of a ledger or empty-state region.", "section": "layout" },
+      { "name": "The Flat Until Modal Rule", "body": "Rows, controls, and status rails stay shadowless; only overlays receive structural elevation.", "section": "elevation" },
+      { "name": "The Curves Carry State Rule", "body": "Rounded shapes identify status, toggles, orbit imagery, or the mark; they do not soften ordinary containers.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do preserve the navy frame, cool paper field, and flat ruled-ledger construction when extending the application.",
+      "Do keep coral rare and attach it to focus, priority, capacity, hard constraints, loading, or attention.",
+      "Do use the priority spine when ordering is part of the operator's decision model.",
+      "Do keep labels visible, focus rings explicit, numerals comparable, and reduced-motion behavior intact.",
+      "Do collapse grids at the established 1180px, 900px, 700px, and 440px breakpoints according to content pressure."
+    ],
+    "donts": [
+      "Don't introduce rounded cards, soft floating panels, or decorative shadows into the base workspace.",
+      "Don't use signal coral as a broad brand wash or routine hover color.",
+      "Don't replace dividers and grid tracks with isolated dashboard tiles.",
+      "Don't use display type for explanatory copy or monospace type for long prose.",
+      "Don't hide consequential state inside color alone; pair it with a label, message, or icon."
+    ]
+  }
+}

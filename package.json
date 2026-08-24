@@ -5,7 +5,7 @@
   "description": "A local-first deal discovery workspace.",
   "type": "module",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.5.0"
   },
   "workspaces": [
     "apps/server",
@@ -15,6 +15,11 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "browser:install": "playwright install chromium",
+    "dev": "npm run build && concurrently --kill-others --names api,web \"node apps/server/dist/main.js\" \"npm run dev --workspace @dealfinder/web\"",
+    "fixtures:check": "node scripts/check-facebook-fixtures.mjs",
+    "fixtures:sanitize": "node scripts/sanitize-facebook-fixture.mjs",
+    "start": "node apps/server/dist/main.js",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -23,8 +28,8 @@
     "@types/node": "^22.15.0",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
+    "concurrently": "^9.2.1",
     "typescript": "^5.8.2",
     "vitest": "^3.2.4"
   }
 }
-
