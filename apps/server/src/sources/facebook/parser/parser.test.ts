@@ -53,6 +53,19 @@ describe("Facebook Marketplace result parser", () => {
     });
   });
 
+  it("extracts cards using Facebook's np item route", () => {
+    const result = parseFacebookResultPage(fixture("results-np-v1.html"));
+
+    expect(result.candidates).toEqual([
+      expect.objectContaining({
+        sourceListingId: "100000000000007",
+        url: "https://www.facebook.com/marketplace/item/100000000000007/",
+        title: "Volkswagen Golf 1.6 TDI 2017"
+      })
+    ]);
+    expect(result.rejectedCards).toEqual([]);
+  });
+
   it("rejects corrupt cards without committing partial candidates", () => {
     const result = parseFacebookResultPage(fixture("results-missing-fields-v1.html"));
 

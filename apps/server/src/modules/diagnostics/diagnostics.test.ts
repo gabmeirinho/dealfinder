@@ -16,7 +16,7 @@ import {
   FacebookFailureCoordinator,
   type FacebookFailureNotice
 } from "../../sources/facebook/failures/index.js";
-import { DiagnosticsService } from "./service.js";
+import { DiagnosticsService, sanitizeDiagnosticDom } from "./service.js";
 
 describe("privacy-safe Facebook diagnostics", () => {
   let database: DatabaseConnection | undefined;
@@ -103,6 +103,18 @@ describe("privacy-safe Facebook diagnostics", () => {
     expect(existsSync(domPath)).toBe(false);
     expect(database.facebookHealth.getDiagnostic(metadata?.id ?? "")).toBeUndefined();
     expect(database.facebookHealth.getPause(pause.id)?.diagnosticId).toBeNull();
+  });
+
+  it("retains only the listing ID from Facebook's np item route", () => {
+    const sanitized = sanitizeDiagnosticDom(
+      '<a href="https://www.facebook.com/marketplace/np/item/100000000000007/?tracking=private">Private title</a>',
+      "selector_contract",
+      "Marketplace result-card contract changed",
+      "https://www.facebook.com/marketplace/np/lisbon/search/?query=private"
+    );
+
+    expect(sanitized).toContain('data-marketplace-item="100000000000007"');
+    expect(sanitized).not.toMatch(/Private title|tracking=private|query=private/u);
   });
 });
 

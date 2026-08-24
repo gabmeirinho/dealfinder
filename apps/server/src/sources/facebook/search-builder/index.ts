@@ -9,15 +9,23 @@ export interface FacebookSearchBuild {
   postFilters: readonly FacebookPostFilter[];
 }
 
-const FACEBOOK_VEHICLES_URL =
-  "https://www.facebook.com/marketplace/category/vehicles/";
+const FACEBOOK_ORIGIN = "https://www.facebook.com";
+const FACEBOOK_VEHICLES_PATH = "/marketplace/category/vehicles/";
 
 /**
  * Builds only URL parameters characterized against Facebook's current vehicle
  * category route. Everything else remains an explicit local post-filter.
  */
 export function buildFacebookVehicleSearch(search: VehicleSearch): FacebookSearchBuild {
-  const url = new URL(FACEBOOK_VEHICLES_URL);
+  const locationSlug = search.location.mode === "radius"
+    ? facebookMarketplaceLocationSlug(search.location.origin)
+    : null;
+  const url = new URL(
+    locationSlug === null
+      ? FACEBOOK_VEHICLES_PATH
+      : `/marketplace/${locationSlug}/vehicles/`,
+    FACEBOOK_ORIGIN
+  );
   const supportedFilters: string[] = [];
   const queryParts = uniqueKeywords([
     ...(search.criteria.makeKeywords?.value ?? []),
@@ -60,6 +68,10 @@ export function buildFacebookVehicleSearch(search: VehicleSearch): FacebookSearc
     url.searchParams.set("maxMileage", String(search.criteria.maximumMileageKm.value));
     supportedFilters.push("criteria.maximumMileageKm");
   }
+  if (search.location.mode === "radius") {
+    url.searchParams.set("radius", String(search.location.radiusKm));
+    supportedFilters.push("location");
+  }
 
   return {
     url: url.toString(),
@@ -69,13 +81,13 @@ export function buildFacebookVehicleSearch(search: VehicleSearch): FacebookSearc
 }
 
 function buildPostFilters(search: VehicleSearch): FacebookPostFilter[] {
-  const filters: FacebookPostFilter[] = [{
-    field: "location",
-    label: search.location.mode === "nationwide"
-      ? "Location: Portugal"
-      : `Location: ${search.location.origin} within ${search.location.radiusKm} km`,
-    reason: "Confirm Facebook's location and distance controls in the visible browser."
-  }];
+  const filters: FacebookPostFilter[] = search.location.mode === "nationwide"
+    ? [{
+      field: "location",
+      label: "Location: Portugal",
+      reason: "Confirm Facebook's nationwide location control in the visible browser."
+    }]
+    : [];
 
   if (search.criteria.fuels !== null) filters.push({
     field: "fuels",
@@ -117,4 +129,16 @@ function uniqueKeywords(keywords: readonly string[]): string[] {
     seen.add(normalized);
     return true;
   });
+}
+
+export function facebookMarketplaceLocationSlug(origin: string): string {
+  const locality = origin.split(",", 1)[0]?.trim() ?? "";
+  const slug = locality
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .toLocaleLowerCase("en")
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "");
+  if (slug.length === 0) throw new Error(`Cannot create a Facebook location from ${origin}`);
+  return slug;
 }

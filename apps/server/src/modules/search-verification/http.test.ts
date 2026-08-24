@@ -86,7 +86,7 @@ describe("search verification HTTP API", () => {
     });
     expect(database.searchSources.get(search.id, "facebook")).toBeUndefined();
 
-    session.url = "https://www.facebook.com/marketplace/category/vehicles/?query=Volkswagen";
+    session.url = "https://www.facebook.com/marketplace/lisbon/vehicles/?query=Volkswagen&radius=150";
     const confirmed = await fetch(
       `${baseUrl}/api/searches/${search.id}/verification/facebook/confirm`,
       { method: "POST" }

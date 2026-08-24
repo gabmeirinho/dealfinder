@@ -8,6 +8,12 @@ import type {
   MarketplaceResultSnapshot
 } from "./adapter.js";
 
+export const FACEBOOK_MARKETPLACE_ITEM_SELECTOR = [
+  'a[href*="/marketplace/item/"]',
+  'a[href*="/marketplace/np/item/"]',
+  'a[href*="/marketplace/shops/item/"]'
+].join(", ");
+
 export class PlaywrightBrowserAdapter implements BrowserAdapter {
   public async open(profileDirectory: string): Promise<BrowserSession> {
     await mkdir(profileDirectory, { recursive: true });
@@ -50,6 +56,7 @@ class PlaywrightBrowserSession implements BrowserSession {
 
   public async navigate(url: string): Promise<string> {
     await this.#controlledPage.goto(url, { waitUntil: "domcontentloaded" });
+    await submitMarketplaceSearch(this.#controlledPage, url);
     return this.#controlledPage.url();
   }
 
@@ -65,7 +72,7 @@ class PlaywrightBrowserSession implements BrowserSession {
   public async snapshotMarketplaceResults(): Promise<MarketplaceResultSnapshot> {
     const [cards, atEnd, title, bodyText, html, loadingCount] = await Promise.all([
       this.#controlledPage
-        .locator('a[href*="/marketplace/item/"]')
+        .locator(FACEBOOK_MARKETPLACE_ITEM_SELECTOR)
         .evaluateAll((anchors) => anchors.map((anchor) => anchor.outerHTML)),
       this.#controlledPage.evaluate(() => {
         const browser = globalThis as unknown as {
@@ -108,4 +115,57 @@ class PlaywrightBrowserSession implements BrowserSession {
   public async captureDiagnosticScreenshot(): Promise<Uint8Array> {
     return await this.#controlledPage.screenshot({ type: "png", fullPage: false });
   }
+}
+
+async function submitMarketplaceSearch(page: Page, requestedUrl: string): Promise<void> {
+  const expectedQuery = marketplaceQueryFromUrl(requestedUrl);
+  if (expectedQuery === null) return;
+
+  try {
+    await page.waitForFunction((query) => {
+      const expected = String(query).trim().toLocaleLowerCase("en");
+      const browser = globalThis as unknown as {
+        document: { querySelectorAll(selector: string): ArrayLike<{ value: string }> };
+      };
+      return Array.from(browser.document.querySelectorAll("input"))
+        .some((input) => input.value.trim().toLocaleLowerCase("en") === expected);
+    }, expectedQuery, { timeout: 10_000 });
+  } catch {
+    throw new Error("Facebook did not load the generated Marketplace search query");
+  }
+
+  const inputs = page.locator("input");
+  for (let index = 0; index < await inputs.count(); index += 1) {
+    const input = inputs.nth(index);
+    const value = await input.inputValue().catch(() => "");
+    if (normalizeQuery(value) !== normalizeQuery(expectedQuery)) continue;
+    await input.waitFor({ state: "visible" });
+    await page.waitForTimeout(1_500);
+    await input.click();
+    await input.press("Control+A");
+    await input.type(expectedQuery, { delay: 25 });
+    await input.press("Enter");
+    await page.waitForTimeout(2_000);
+    return;
+  }
+  throw new Error("Facebook did not expose the generated Marketplace search input");
+}
+
+export function marketplaceQueryFromUrl(rawUrl: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+  const isFacebook = url.hostname === "facebook.com" || url.hostname.endsWith(".facebook.com");
+  if (!isFacebook || !url.pathname.toLocaleLowerCase("en").startsWith("/marketplace/")) {
+    return null;
+  }
+  const query = url.searchParams.get("query")?.trim() ?? "";
+  return query.length === 0 ? null : query;
+}
+
+function normalizeQuery(value: string): string {
+  return value.trim().replace(/\s+/gu, " ").toLocaleLowerCase("en");
 }

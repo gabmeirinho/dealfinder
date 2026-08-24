@@ -7,7 +7,10 @@ import type {
 } from "@dealfinder/domain";
 
 import type { BrowserManager } from "../browser/index.js";
-import { buildFacebookVehicleSearch } from "../../sources/facebook/search-builder/index.js";
+import {
+  buildFacebookVehicleSearch,
+  facebookMarketplaceLocationSlug
+} from "../../sources/facebook/search-builder/index.js";
 import { fingerprintSearchCriteria } from "./fingerprint.js";
 
 interface PendingVerification {
@@ -78,7 +81,7 @@ export class SearchVerificationService {
       );
     }
 
-    const finalUrl = requireFacebookMarketplaceUrl(this.#browser().currentUrl());
+    const finalUrl = requireFacebookMarketplaceUrl(this.#browser().currentUrl(), search);
     const verifiedAt = this.#now().toISOString();
     this.#database().searchSources.saveVerification({
       searchId,
@@ -117,7 +120,10 @@ export class SearchVerificationService {
   }
 }
 
-export function requireFacebookMarketplaceUrl(rawUrl: string): string {
+export function requireFacebookMarketplaceUrl(
+  rawUrl: string,
+  search?: Pick<VehicleSearch, "location">
+): string {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -131,6 +137,20 @@ export function requireFacebookMarketplaceUrl(rawUrl: string): string {
     !url.pathname.toLocaleLowerCase("en").startsWith("/marketplace/")
   ) {
     throw invalidResultsPage();
+  }
+  if (search?.location.mode === "radius") {
+    const expectedLocation = facebookMarketplaceLocationSlug(search.location.origin);
+    const pathSegments = url.pathname.toLocaleLowerCase("en").split("/").filter(Boolean);
+    const locationSegment = pathSegments[1] === "np"
+      ? pathSegments[2]
+      : pathSegments[1];
+    if (pathSegments[0] !== "marketplace" || locationSegment !== expectedLocation) {
+      throw new SearchVerificationError(
+        409,
+        "FACEBOOK_LOCATION_MISMATCH",
+        `Facebook is not showing the configured location ${search.location.origin}; keep the controlled browser on those Marketplace results before confirming`
+      );
+    }
   }
   url.hash = "";
   return url.toString();

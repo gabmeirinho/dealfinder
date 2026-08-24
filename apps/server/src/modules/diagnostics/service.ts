@@ -159,7 +159,7 @@ function safeAttributes(node: HtmlNode): string {
 function marketplaceItemId(value: string): string | null {
   try {
     return new URL(value, "https://www.facebook.com").pathname
-      .match(/^\/marketplace\/item\/(\d+)(?:\/|$)/u)?.[1] ?? null;
+      .match(/^\/marketplace\/(?:(?:shops|np)\/)?item\/(\d+)(?:\/|$)/u)?.[1] ?? null;
   } catch {
     return null;
   }

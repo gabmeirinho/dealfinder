@@ -50,6 +50,8 @@ describe("Facebook search verification", () => {
       state: "pending"
     });
     expect(new URL(preview.generatedUrl).searchParams.get("query")).toBe("Volkswagen Golf");
+    expect(new URL(preview.generatedUrl).pathname).toBe("/marketplace/lisbon/vehicles/");
+    expect(new URL(preview.generatedUrl).searchParams.get("radius")).toBe("150");
     expect(context.database.searchSources.get(search.id, "facebook")).toBeUndefined();
 
     context.session.url = "https://www.facebook.com/marketplace/lisbon/vehicles/?query=Volkswagen%20Golf&radius=100";
@@ -96,6 +98,48 @@ describe("Facebook search verification", () => {
     expect(() => context.service.confirmFacebook(search.id)).toThrowError(
       expect.objectContaining<Partial<SearchVerificationError>>({
         code: "SEARCH_CRITERIA_CHANGED"
+      })
+    );
+  });
+
+  it("refuses to confirm results for a different Marketplace location", async () => {
+    const context = await createContext();
+    const search = context.createSearch();
+    await context.service.openFacebook(search.id);
+    context.session.url = "https://www.facebook.com/marketplace/paris/vehicles/?query=Volkswagen%20Golf";
+
+    expect(() => context.service.confirmFacebook(search.id)).toThrowError(
+      expect.objectContaining<Partial<SearchVerificationError>>({
+        code: "FACEBOOK_LOCATION_MISMATCH"
+      })
+    );
+  });
+
+  it("accepts Facebook's canonical np search route for the configured location", async () => {
+    const context = await createContext();
+    const search = context.createSearch();
+    await context.service.openFacebook(search.id);
+    context.session.url = "https://www.facebook.com/marketplace/np/lisbon/search/?query=Volkswagen%20Golf&radius=150";
+
+    expect(context.service.confirmFacebook(search.id)).toMatchObject({
+      searchId: search.id,
+      source: "facebook",
+      state: "verified"
+    });
+    expect(context.database.searchSources.get(search.id, "facebook")?.sourceUrl).toBe(
+      context.session.url
+    );
+  });
+
+  it("refuses a different location on Facebook's canonical np search route", async () => {
+    const context = await createContext();
+    const search = context.createSearch();
+    await context.service.openFacebook(search.id);
+    context.session.url = "https://www.facebook.com/marketplace/np/paris/search/?query=Volkswagen%20Golf";
+
+    expect(() => context.service.confirmFacebook(search.id)).toThrowError(
+      expect.objectContaining<Partial<SearchVerificationError>>({
+        code: "FACEBOOK_LOCATION_MISMATCH"
       })
     );
   });

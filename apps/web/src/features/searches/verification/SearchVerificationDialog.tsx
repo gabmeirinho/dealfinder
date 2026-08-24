@@ -23,7 +23,8 @@ const SUPPORTED_LABELS: Readonly<Record<string, string>> = {
   "criteria.requiredKeywords": "Required keywords",
   "criteria.priceRange": "Price range",
   "criteria.minimumYear": "Minimum year",
-  "criteria.maximumMileageKm": "Maximum mileage"
+  "criteria.maximumMileageKm": "Maximum mileage",
+  location: "Location"
 };
 
 export function SearchVerificationDialog({
@@ -140,7 +141,10 @@ function presentSupportedFilter(
       : `${criteria.minimumYear.value} or newer`,
     "criteria.maximumMileageKm": criteria.maximumMileageKm === null
       ? "—"
-      : `Up to ${formatNumber(criteria.maximumMileageKm.value)} km`
+      : `Up to ${formatNumber(criteria.maximumMileageKm.value)} km`,
+    location: search.location.mode === "nationwide"
+      ? "Portugal"
+      : `${search.location.origin} within ${search.location.radiusKm} km`
   };
   return {
     label: SUPPORTED_LABELS[field] ?? field,

@@ -23,7 +23,7 @@ interface HtmlNode {
 
 const CARD_TEST_ID = "marketplace-item-card";
 const FACEBOOK_HOST = /^(?:www\.)?facebook\.com$/u;
-const ITEM_PATH = /^\/marketplace\/(?:shops\/)?item\/(\d+)(?:\/|$)/u;
+const ITEM_PATH = /^\/marketplace\/(?:(?:shops|np)\/)?item\/(\d+)(?:\/|$)/u;
 const PRICE_PATTERN = /^(?:€\s*[\d., ]+|[\d., ]+\s*€|free|grátis|gratuito|contact seller|contactar vendedor|preço sob consulta)$/iu;
 
 /**

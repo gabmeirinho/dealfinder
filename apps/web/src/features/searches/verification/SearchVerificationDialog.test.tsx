@@ -30,7 +30,8 @@ describe("Facebook verification dialog", () => {
     expect(screen.getByText("Price range")).toBeTruthy();
     expect(screen.getByText("Volkswagen")).toBeTruthy();
     expect(screen.getByText("€15,000–€25,000")).toBeTruthy();
-    expect(screen.getByText("Location: Lisbon, Portugal within 150 km")).toBeTruthy();
+    expect(screen.getByText("Location")).toBeTruthy();
+    expect(screen.getByText("Lisbon, Portugal within 150 km")).toBeTruthy();
     expect(screen.getByText("Captured automatically")).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
   });
@@ -87,12 +88,8 @@ function preview(): SearchVerificationPreview {
     source: "facebook",
     state: "pending",
     generatedUrl: "https://www.facebook.com/marketplace/category/vehicles/?query=Golf",
-    supportedFilters: ["criteria.makeKeywords", "criteria.priceRange"],
-    postFilters: [{
-      field: "location",
-      label: "Location: Lisbon, Portugal within 150 km",
-      reason: "Confirm Facebook's location and distance controls in the visible browser."
-    }]
+    supportedFilters: ["criteria.makeKeywords", "criteria.priceRange", "location"],
+    postFilters: []
   };
 }
 

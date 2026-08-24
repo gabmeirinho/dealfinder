@@ -15,12 +15,13 @@ describe("Facebook vehicle search builder", () => {
     const url = new URL(result.url);
 
     expect(url.origin).toBe("https://www.facebook.com");
-    expect(url.pathname).toBe("/marketplace/category/vehicles/");
+    expect(url.pathname).toBe("/marketplace/lisbon/vehicles/");
     expect(url.searchParams.get("query")).toBe("Volkswagen Golf GTE service history");
     expect(url.searchParams.get("minPrice")).toBe("15000");
     expect(url.searchParams.get("maxPrice")).toBe("25000");
     expect(url.searchParams.get("minYear")).toBe("2019");
     expect(url.searchParams.get("maxMileage")).toBe("120000");
+    expect(url.searchParams.get("radius")).toBe("150");
     expect(result.supportedFilters).toEqual([
       "criteria.makeKeywords",
       "criteria.modelKeywords",
@@ -28,22 +29,22 @@ describe("Facebook vehicle search builder", () => {
       "criteria.requiredKeywords",
       "criteria.priceRange",
       "criteria.minimumYear",
-      "criteria.maximumMileageKm"
+      "criteria.maximumMileageKm",
+      "location"
     ]);
   });
 
-  it("identifies unsupported criteria and location for post-filtering", () => {
+  it("sends radius location and identifies unsupported criteria for post-filtering", () => {
     const result = buildFacebookVehicleSearch(asSearch(completeDraft()));
 
     expect(result.postFilters.map(({ field }) => field)).toEqual([
-      "location",
       "fuels",
       "transmissions",
       "minimumPowerHp",
       "sellerPreference",
       "excludedKeywords"
     ]);
-    expect(result.postFilters[0]?.label).toBe("Location: Lisbon, Portugal within 150 km");
+    expect(result.postFilters[0]?.label).toBe("Fuel: plug-in hybrid");
   });
 
   it("omits absent optional URL parameters without inventing defaults", () => {
@@ -52,8 +53,19 @@ describe("Facebook vehicle search builder", () => {
     const result = buildFacebookVehicleSearch(asSearch(draft));
     const url = new URL(result.url);
 
-    expect([...url.searchParams.keys()]).toEqual(["query"]);
-    expect(result.postFilters).toHaveLength(1);
+    expect(url.pathname).toBe("/marketplace/lisbon/vehicles/");
+    expect([...url.searchParams.keys()]).toEqual(["query", "radius"]);
+    expect(result.postFilters).toHaveLength(0);
+  });
+
+  it("keeps nationwide location as an explicit browser check", () => {
+    const draft = createVehicleSearchDraft("Portugal Golf");
+    draft.location = { mode: "nationwide", origin: null, radiusKm: null };
+    const result = buildFacebookVehicleSearch(asSearch(draft));
+    const url = new URL(result.url);
+
+    expect(url.pathname).toBe("/marketplace/category/vehicles/");
+    expect(url.searchParams.has("radius")).toBe(false);
     expect(result.postFilters[0]?.field).toBe("location");
   });
 });
@@ -83,11 +95,13 @@ function completeDraft(): VehicleSearchDraft {
 function asSearch(draft: VehicleSearchDraft): VehicleSearch {
   return {
     ...draft,
-    location: {
-      mode: "radius",
-      origin: "Lisbon, Portugal",
-      radiusKm: 150
-    },
+    location: draft.location.mode === "nationwide"
+      ? { mode: "nationwide", origin: null, radiusKm: null }
+      : {
+        mode: "radius",
+        origin: draft.location.origin ?? "Lisbon, Portugal",
+        radiusKm: 150
+      },
     id: "search-1",
     createdAt: "2026-08-20T00:00:00.000Z",
     updatedAt: "2026-08-20T00:00:00.000Z"
