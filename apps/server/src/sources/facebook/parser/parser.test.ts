@@ -86,6 +86,44 @@ describe("Facebook Marketplace result parser", () => {
     ]);
   });
 
+  it("rejects cards whose inferred fields exceed persistence bounds", () => {
+    const oversizedTitle = "G".repeat(1001);
+    const result = parseFacebookResultPage(`
+      <main data-dealfinder-results-contract="1">
+        <article data-dealfinder-card="marketplace-item">
+          <a href="/marketplace/np/item/100000000000008/">
+            <span>9 500 €</span><span>${oversizedTitle}</span>
+          </a>
+        </article>
+      </main>
+    `);
+
+    expect(result.candidates).toEqual([]);
+    expect(result.rejectedCards).toEqual([{
+      cardIndex: 0,
+      sourceListingId: "100000000000008",
+      reasons: ["Listing title exceeds 1000 characters"]
+    }]);
+  });
+
+  it("rejects contact-bearing cards before persistence", () => {
+    const result = parseFacebookResultPage(`
+      <main data-dealfinder-results-contract="1">
+        <article data-dealfinder-card="marketplace-item">
+          <a href="/marketplace/np/item/100000000000009/">
+            <span>9 500 €</span><span>Volkswagen Golf — 912 345 678</span>
+          </a>
+        </article>
+      </main>
+    `);
+
+    expect(result.candidates).toEqual([]);
+    expect(result.rejectedCards[0]).toMatchObject({
+      sourceListingId: "100000000000009",
+      reasons: ["Seller identity or contact data is not accepted"]
+    });
+  });
+
   it("fails closed when the declared layout contract changes", () => {
     expect(() => parseFacebookResultPage(fixture("results-changed-layout.html")))
       .toThrowError(FacebookResultContractError);

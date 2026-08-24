@@ -31,6 +31,9 @@ export interface FacebookScanResult {
   stopReason: "initial_limit" | "known_streak" | "results_end" | "no_progress";
 }
 
+const MIN_CARDS_FOR_PARTIAL_TOLERANCE = 10;
+const MAX_REJECTED_CARD_RATIO = 0.1;
+
 export interface FacebookScanBrowser {
   navigate(url: string): Promise<string>;
   snapshotMarketplaceResults(): Promise<MarketplaceResultSnapshot>;
@@ -50,6 +53,10 @@ export interface FacebookScannerOptions {
   };
   geocodingProvider?: GeocodingProvider;
   processingWake?: () => void;
+  onStageError?: (input: {
+    phase: "navigation" | "snapshot" | "parsing" | "scroll" | "ingestion";
+    error: unknown;
+  }) => void;
 }
 
 export class FacebookScanner {
@@ -59,6 +66,7 @@ export class FacebookScanner {
   readonly #failures: FacebookScannerOptions["failures"];
   readonly #geocodingProvider: GeocodingProvider | undefined;
   readonly #processingWake: (() => void) | undefined;
+  readonly #onStageError: FacebookScannerOptions["onStageError"];
 
   public constructor(options: FacebookScannerOptions) {
     this.#database = options.database;
@@ -67,6 +75,7 @@ export class FacebookScanner {
     this.#failures = options.failures;
     this.#geocodingProvider = options.geocodingProvider;
     this.#processingWake = options.processingWake;
+    this.#onStageError = options.onStageError;
   }
 
   public async scan(searchId: string): Promise<FacebookScanResult> {
@@ -85,96 +94,97 @@ export class FacebookScanner {
       );
     }
 
-    const initialScan = !database.scanRuns.hasSucceeded(searchId);
-    const observedAt = this.#now().toISOString();
-    const browser = this.#browser();
-    await browser.navigate(verification.sourceUrl);
-    const seenThisScan = new Set<string>();
-    const staged: FacebookRawCandidate[] = [];
-    let cardsSeen = 0;
-    let newCandidates = 0;
-    let consecutiveKnown = 0;
-    let unchangedSnapshots = 0;
+    let phase: "navigation" | "snapshot" | "parsing" | "scroll" | "ingestion" = "navigation";
+    try {
+      const initialScan = !database.scanRuns.hasSucceeded(searchId);
+      const observedAt = this.#now().toISOString();
+      const browser = this.#browser();
+      await browser.navigate(verification.sourceUrl);
+      const seenThisScan = new Set<string>();
+      const staged: FacebookRawCandidate[] = [];
+      let cardsSeen = 0;
+      let newCandidates = 0;
+      let consecutiveKnown = 0;
+      let unchangedSnapshots = 0;
 
-    while (true) {
-      const snapshot = await browser.snapshotMarketplaceResults();
-      let newIdsInSnapshot = 0;
-      const classified = classifyFacebookPage(snapshot, {
-        unchangedSnapshots
-      });
-      if (classified !== null) await this.pause(searchId, classified, snapshot);
-      if (snapshot.cards.length > 0) {
-        let parsed: FacebookResultPage;
-        try {
-          parsed = parseFacebookResultPage(wrapCards(snapshot.cards));
-        } catch (error: unknown) {
-          if (error instanceof FacebookResultContractError) {
+      while (true) {
+        phase = "snapshot";
+        const snapshot = await browser.snapshotMarketplaceResults();
+        let newIdsInSnapshot = 0;
+        const classified = classifyFacebookPage(snapshot, { unchangedSnapshots });
+        if (classified !== null) await this.pause(searchId, classified, snapshot);
+        if (snapshot.cards.length > 0) {
+          phase = "parsing";
+          let parsed: FacebookResultPage;
+          try {
+            parsed = parseFacebookResultPage(wrapCards(snapshot.cards));
+          } catch (error: unknown) {
+            if (error instanceof FacebookResultContractError) {
+              await this.pause(searchId, selectorContractFailure(), snapshot);
+            }
+            throw error;
+          }
+          if (hasUnsafeRejectedCards(parsed)) {
             await this.pause(searchId, selectorContractFailure(), snapshot);
           }
-          throw error;
-        }
-        if (parsed.rejectedCards.length > 0) {
-          await this.pause(searchId, selectorContractFailure(), snapshot);
-        }
-        for (const candidate of parsed.candidates) {
-          if (seenThisScan.has(candidate.sourceListingId)) continue;
-          seenThisScan.add(candidate.sourceListingId);
-          newIdsInSnapshot += 1;
-          cardsSeen += 1;
-          const known = database.rawCandidates.get("facebook", candidate.sourceListingId) !== undefined;
-          staged.push(candidate);
-          if (known) {
-            consecutiveKnown += 1;
-          } else {
-            consecutiveKnown = 0;
-            newCandidates += 1;
-          }
+          for (const candidate of parsed.candidates) {
+            if (seenThisScan.has(candidate.sourceListingId)) continue;
+            seenThisScan.add(candidate.sourceListingId);
+            newIdsInSnapshot += 1;
+            cardsSeen += 1;
+            const known = database.rawCandidates.get("facebook", candidate.sourceListingId) !== undefined;
+            staged.push(candidate);
+            if (known) consecutiveKnown += 1;
+            else {
+              consecutiveKnown = 0;
+              newCandidates += 1;
+            }
 
-          if (initialScan && cardsSeen >= INITIAL_SCAN_CARD_LIMIT) {
-            return this.commit(
-              searchId,
-              observedAt,
-              staged,
-              { cardsSeen, newCandidates, initialScan, stopReason: "initial_limit" }
-            );
-          }
-          if (!initialScan && consecutiveKnown >= KNOWN_LISTING_STOP_COUNT) {
-            return this.commit(
-              searchId,
-              observedAt,
-              staged,
-              { cardsSeen, newCandidates, initialScan, stopReason: "known_streak" }
-            );
+            if (initialScan && cardsSeen >= INITIAL_SCAN_CARD_LIMIT) {
+              phase = "ingestion";
+              return await this.commit(searchId, observedAt, staged, {
+                cardsSeen, newCandidates, initialScan, stopReason: "initial_limit"
+              });
+            }
+            if (!initialScan && consecutiveKnown >= KNOWN_LISTING_STOP_COUNT) {
+              phase = "ingestion";
+              return await this.commit(searchId, observedAt, staged, {
+                cardsSeen, newCandidates, initialScan, stopReason: "known_streak"
+              });
+            }
           }
         }
-      }
 
-      const nextUnchangedSnapshots = newIdsInSnapshot === 0
-        ? unchangedSnapshots + 1
-        : 0;
-      const stalledFailure = classifyFacebookPage(snapshot, {
-        unchangedSnapshots: nextUnchangedSnapshots
-      });
-      if (stalledFailure !== null) await this.pause(searchId, stalledFailure, snapshot);
+        const nextUnchangedSnapshots = newIdsInSnapshot === 0 ? unchangedSnapshots + 1 : 0;
+        const stalledFailure = classifyFacebookPage(snapshot, {
+          unchangedSnapshots: nextUnchangedSnapshots
+        });
+        if (stalledFailure !== null) await this.pause(searchId, stalledFailure, snapshot);
 
-      if (snapshot.atEnd) {
-        return this.commit(
-          searchId,
-          observedAt,
-          staged,
-          { cardsSeen, newCandidates, initialScan, stopReason: "results_end" }
-        );
+        if (snapshot.atEnd) {
+          phase = "ingestion";
+          return await this.commit(searchId, observedAt, staged, {
+            cardsSeen, newCandidates, initialScan, stopReason: "results_end"
+          });
+        }
+        unchangedSnapshots = nextUnchangedSnapshots;
+        if (unchangedSnapshots >= 3) {
+          phase = "ingestion";
+          return await this.commit(searchId, observedAt, staged, {
+            cardsSeen, newCandidates, initialScan, stopReason: "no_progress"
+          });
+        }
+        phase = "scroll";
+        await browser.scrollMarketplaceResults();
       }
-      unchangedSnapshots = nextUnchangedSnapshots;
-      if (unchangedSnapshots >= 3) {
-        return this.commit(
-          searchId,
-          observedAt,
-          staged,
-          { cardsSeen, newCandidates, initialScan, stopReason: "no_progress" }
-        );
-      }
-      await browser.scrollMarketplaceResults();
+    } catch (error: unknown) {
+      if (hasErrorCode(error)) throw error;
+      this.#onStageError?.({ phase, error });
+      throw new FacebookScannerError(
+        `FACEBOOK_${phase.toLocaleUpperCase("en")}_FAILED`,
+        `Facebook scan failed during ${phase}`,
+        { cause: error }
+      );
     }
   }
 
@@ -224,9 +234,26 @@ export class FacebookScanner {
   }
 }
 
+function hasErrorCode(error: unknown): error is { code: string } {
+  return typeof error === "object" && error !== null &&
+    "code" in error && typeof error.code === "string";
+}
+
+function hasUnsafeRejectedCards(page: FacebookResultPage): boolean {
+  const rejected = page.rejectedCards.length;
+  if (rejected === 0) return false;
+  const total = page.candidates.length + rejected;
+  if (total < MIN_CARDS_FOR_PARTIAL_TOLERANCE) return true;
+  return rejected / total > MAX_REJECTED_CARD_RATIO;
+}
+
 export class FacebookScannerError extends Error {
-  public constructor(public readonly code: string, message: string) {
-    super(message);
+  public constructor(
+    public readonly code: string,
+    message: string,
+    options?: ErrorOptions
+  ) {
+    super(message, options);
     this.name = "FacebookScannerError";
   }
 }

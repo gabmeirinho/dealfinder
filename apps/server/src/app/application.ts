@@ -128,7 +128,12 @@ export function createApplicationRuntime(
     processingWake: () => {
       enrichment.wake();
       duplicates.wake();
-    }
+    },
+    onStageError: ({ phase, error }) => logger.error("Facebook scan stage failed", {
+      phase,
+      errorType: error instanceof Error ? error.name : "unknown",
+      errorMessage: error instanceof Error ? error.message : "Unknown scanner failure"
+    })
   });
   const scheduler = new ScanScheduler({
     database: getDatabase,

@@ -235,12 +235,7 @@ function validateInput(input: NormalizeVehicleInput): void {
   }
   const originalTextFields = [input.title, input.description, ...input.cardFacts]
     .filter((value): value is string => value !== null);
-  const containsSellerContact = originalTextFields.some((text) =>
-    /\b[\w.+-]+@[\w.-]+\.\w{2,}\b/iu.test(text) ||
-    /(?:\+?\d[\s().-]*){9,}/u.test(text) ||
-    /(?:wa\.me|whatsapp|facebook\.com\/(?:profile|people|user)|mailto:|tel:)/iu.test(text)
-  );
-  if (containsSellerContact) {
+  if (containsSellerIdentityOrContactData(originalTextFields)) {
     throw new Error("Seller identity or contact data is not accepted for normalization");
   }
   if (!Number.isInteger(input.referenceYear) || input.referenceYear < 1950 || input.referenceYear > 9999) {
@@ -259,6 +254,14 @@ function validateInput(input: NormalizeVehicleInput): void {
       throw new Error(`${label} must be a non-negative integer`);
     }
   }
+}
+
+export function containsSellerIdentityOrContactData(fields: readonly string[]): boolean {
+  return fields.some((text) =>
+    /\b[\w.+-]+@[\w.-]+\.\w{2,}\b/iu.test(text) ||
+    /(?:\+?\d[\s().-]*){9,}/u.test(text) ||
+    /(?:wa\.me|whatsapp|facebook\.com\/(?:profile|people|user)|mailto:|tel:)/iu.test(text)
+  );
 }
 
 export type { NormalizedFactField };

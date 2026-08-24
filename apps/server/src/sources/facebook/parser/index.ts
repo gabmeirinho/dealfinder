@@ -1,4 +1,5 @@
 import { parse } from "parse5";
+import { containsSellerIdentityOrContactData } from "@dealfinder/domain";
 
 import {
   FACEBOOK_RESULTS_CONTRACT_VERSION,
@@ -79,6 +80,10 @@ function parseCard(
 
   if (itemLink === undefined) reasons.push("A canonical Marketplace item URL is required");
   if (title === null) reasons.push("A non-empty listing title is required");
+  if (title !== null && title.length > 1000) reasons.push("Listing title exceeds 1000 characters");
+  if (displayedPrice !== null && displayedPrice.length > 200) {
+    reasons.push("Displayed price exceeds 200 characters");
+  }
   if (reasons.length > 0) return { cardIndex, sourceListingId, reasons };
 
   const location = fieldText(card, "location") ?? inferLocation(
@@ -86,10 +91,31 @@ function parseCard(
     displayedPrice,
     title as string
   );
+  if (location !== null && location.length > 500) {
+    return {
+      cardIndex,
+      sourceListingId,
+      reasons: ["Listing location exceeds 500 characters"]
+    };
+  }
   const rawCardFacts = unique([
     ...fieldTexts(card, "fact"),
     ...[displayedPrice, title, location].filter((value): value is string => value !== null)
   ]);
+  if (rawCardFacts.some((fact) => fact.length > 1000)) {
+    return {
+      cardIndex,
+      sourceListingId,
+      reasons: ["A card fact exceeds 1000 characters"]
+    };
+  }
+  if (containsSellerIdentityOrContactData(rawCardFacts)) {
+    return {
+      cardIndex,
+      sourceListingId,
+      reasons: ["Seller identity or contact data is not accepted"]
+    };
+  }
   const thumbnailUrl = normalizeThumbnailUrl(
     findAll(card, (node) => node.tagName === "img")
       .map((node) => attribute(node, "src"))

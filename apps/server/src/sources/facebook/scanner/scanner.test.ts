@@ -124,6 +124,66 @@ describe("Facebook scanner", () => {
     expect(setup.database.rawCandidates.get("facebook", firstCandidate.sourceListingId))
       .toBeUndefined();
   });
+
+  it("skips a small number of malformed cards on a substantial result page", async () => {
+    const setup = createSetup();
+    database = setup.database;
+    const browser = new FakeScanBrowser([{
+      cards: [
+        ...Array.from({ length: 19 }, (_, index) => card(index + 1)),
+        malformedCard(20)
+      ],
+      atEnd: true,
+      page: marketplacePage("Marketplace results")
+    }]);
+    const scanner = new FacebookScanner({
+      database: () => setup.database,
+      browser: () => browser,
+      now: () => new Date("2026-08-23T10:00:00.000Z")
+    });
+
+    await expect(scanner.scan(setup.searchId)).resolves.toMatchObject({
+      cardsSeen: 19,
+      newCandidates: 19,
+      stopReason: "results_end"
+    });
+    expect(setup.database.listings.getBySource("facebook", candidate(1).sourceListingId))
+      .toBeDefined();
+  });
+
+  it("still fails closed when too much of the result page is malformed", async () => {
+    const setup = createSetup();
+    database = setup.database;
+    const browser = new FakeScanBrowser([{
+      cards: [
+        ...Array.from({ length: 8 }, (_, index) => card(index + 1)),
+        malformedCard(9),
+        malformedCard(10)
+      ],
+      atEnd: true,
+      page: marketplacePage("Marketplace results")
+    }]);
+    const failures: string[] = [];
+    const scanner = new FacebookScanner({
+      database: () => setup.database,
+      browser: () => browser,
+      now: () => new Date("2026-08-23T10:00:00.000Z"),
+      failures: {
+        pause: async (_searchId, failure) => {
+          failures.push(failure.kind);
+          return { id: "pause-selector" };
+        }
+      }
+    });
+
+    await expect(scanner.scan(setup.searchId)).rejects.toMatchObject({
+      code: "FACEBOOK_SELECTOR_CONTRACT",
+      pauseId: "pause-selector"
+    });
+    expect(failures).toEqual(["selector_contract"]);
+    expect(setup.database.rawCandidates.get("facebook", candidate(1).sourceListingId))
+      .toBeUndefined();
+  });
 });
 
 class FakeScanBrowser implements FacebookScanBrowser {
@@ -210,6 +270,10 @@ function candidate(id: number) {
 function card(id: number): string {
   const value = candidate(id);
   return `<a href="${value.url}"><span>${value.displayedPrice}</span><span>${value.title}</span><span>${value.location}</span></a>`;
+}
+
+function malformedCard(id: number): string {
+  return `<a href="${candidate(id).url}"><img src="https://example.invalid/incomplete.jpg"></a>`;
 }
 
 function marketplacePage(bodyText: string) {

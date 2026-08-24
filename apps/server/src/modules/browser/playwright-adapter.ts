@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 
-import { chromium, type BrowserContext, type Page } from "playwright";
+import { chromium, errors, type BrowserContext, type Page } from "playwright";
 
 import type {
   BrowserAdapter,
@@ -13,6 +13,29 @@ export const FACEBOOK_MARKETPLACE_ITEM_SELECTOR = [
   'a[href*="/marketplace/np/item/"]',
   'a[href*="/marketplace/shops/item/"]'
 ].join(", ");
+
+const FACEBOOK_NAVIGATION_TIMEOUT_MS = 15_000;
+const FACEBOOK_RESULTS_TIMEOUT_MS = 15_000;
+const FACEBOOK_SNAPSHOT_RETRY_ATTEMPTS = 10;
+const FACEBOOK_SNAPSHOT_RETRY_DELAY_MS = 500;
+
+export class FacebookNavigationError extends Error {
+  public readonly code = "FACEBOOK_NAVIGATION_FAILED";
+
+  public constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "FacebookNavigationError";
+  }
+}
+
+export class FacebookSnapshotError extends Error {
+  public readonly code = "FACEBOOK_SNAPSHOT_FAILED";
+
+  public constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "FacebookSnapshotError";
+  }
+}
 
 export class PlaywrightBrowserAdapter implements BrowserAdapter {
   public async open(profileDirectory: string): Promise<BrowserSession> {
@@ -55,9 +78,7 @@ class PlaywrightBrowserSession implements BrowserSession {
   }
 
   public async navigate(url: string): Promise<string> {
-    await this.#controlledPage.goto(url, { waitUntil: "domcontentloaded" });
-    await submitMarketplaceSearch(this.#controlledPage, url);
-    return this.#controlledPage.url();
+    return await navigateMarketplacePage(this.#controlledPage, url);
   }
 
   public currentUrl(): string {
@@ -70,35 +91,48 @@ class PlaywrightBrowserSession implements BrowserSession {
   }
 
   public async snapshotMarketplaceResults(): Promise<MarketplaceResultSnapshot> {
-    const [cards, atEnd, title, bodyText, html, loadingCount] = await Promise.all([
-      this.#controlledPage
-        .locator(FACEBOOK_MARKETPLACE_ITEM_SELECTOR)
-        .evaluateAll((anchors) => anchors.map((anchor) => anchor.outerHTML)),
-      this.#controlledPage.evaluate(() => {
-        const browser = globalThis as unknown as {
-          scrollY: number;
-          innerHeight: number;
-          document: { documentElement: { scrollHeight: number } };
+    for (let attempt = 1; attempt <= FACEBOOK_SNAPSHOT_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        const [cards, atEnd, title, bodyText, html, loadingCount] = await Promise.all([
+          this.#controlledPage
+            .locator(FACEBOOK_MARKETPLACE_ITEM_SELECTOR)
+            .evaluateAll((anchors) => anchors.map((anchor) => anchor.outerHTML)),
+          this.#controlledPage.evaluate(() => {
+            const browser = globalThis as unknown as {
+              scrollY: number;
+              innerHeight: number;
+              document: { documentElement: { scrollHeight: number } };
+            };
+            return browser.scrollY + browser.innerHeight >=
+              browser.document.documentElement.scrollHeight - 4;
+          }),
+          this.#controlledPage.title(),
+          this.#controlledPage.locator("body").innerText().catch(() => ""),
+          this.#controlledPage.content(),
+          this.#controlledPage.locator('[aria-busy="true"], [role="progressbar"]').count()
+        ]);
+        return {
+          cards,
+          atEnd,
+          page: {
+            url: this.#controlledPage.url(),
+            title,
+            bodyText: bodyText.slice(0, 100_000),
+            html,
+            loading: loadingCount > 0
+          }
         };
-        return browser.scrollY + browser.innerHeight >=
-          browser.document.documentElement.scrollHeight - 4;
-      }),
-      this.#controlledPage.title(),
-      this.#controlledPage.locator("body").innerText().catch(() => ""),
-      this.#controlledPage.content(),
-      this.#controlledPage.locator('[aria-busy="true"], [role="progressbar"]').count()
-    ]);
-    return {
-      cards,
-      atEnd,
-      page: {
-        url: this.#controlledPage.url(),
-        title,
-        bodyText: bodyText.slice(0, 100_000),
-        html,
-        loading: loadingCount > 0
+      } catch (error: unknown) {
+        if (attempt === FACEBOOK_SNAPSHOT_RETRY_ATTEMPTS || !isTransientPageReadError(error)) {
+          throw new FacebookSnapshotError(
+            "Facebook Marketplace could not be read after navigation",
+            { cause: error }
+          );
+        }
+        await this.#controlledPage.waitForTimeout(FACEBOOK_SNAPSHOT_RETRY_DELAY_MS);
       }
-    };
+    }
+    throw new FacebookSnapshotError("Facebook Marketplace could not be read after navigation");
   }
 
   public async scrollMarketplaceResults(): Promise<void> {
@@ -114,6 +148,37 @@ class PlaywrightBrowserSession implements BrowserSession {
 
   public async captureDiagnosticScreenshot(): Promise<Uint8Array> {
     return await this.#controlledPage.screenshot({ type: "png", fullPage: false });
+  }
+}
+
+export function isTransientPageReadError(error: unknown): boolean {
+  if (error instanceof errors.TimeoutError) return true;
+  const message = error instanceof Error ? error.message.toLocaleLowerCase("en") : "";
+  return [
+    "execution context was destroyed",
+    "cannot find context with specified id",
+    "because page is navigating",
+    "most likely because of a navigation"
+  ].some((fragment) => message.includes(fragment));
+}
+
+export async function navigateMarketplacePage(page: Page, url: string): Promise<string> {
+  try {
+    // Facebook renders Marketplace as a client-side application. Waiting for
+    // DOMContentLoaded can exhaust Playwright's default timeout even after the
+    // usable document has committed, so readiness is checked explicitly below.
+    await page.goto(url, {
+      waitUntil: "commit",
+      timeout: FACEBOOK_NAVIGATION_TIMEOUT_MS
+    });
+    await submitMarketplaceSearch(page, url);
+    await waitForMarketplaceResults(page);
+    return page.url();
+  } catch (error: unknown) {
+    throw new FacebookNavigationError(
+      "Facebook Marketplace did not become ready for scanning",
+      { cause: error }
+    );
   }
 }
 
@@ -145,7 +210,6 @@ async function submitMarketplaceSearch(page: Page, requestedUrl: string): Promis
     await input.press("Control+A");
     await input.type(expectedQuery, { delay: 25 });
     await input.press("Enter");
-    await page.waitForTimeout(2_000);
     return;
   }
   throw new Error("Facebook did not expose the generated Marketplace search input");
@@ -162,8 +226,23 @@ export function marketplaceQueryFromUrl(rawUrl: string): string | null {
   if (!isFacebook || !url.pathname.toLocaleLowerCase("en").startsWith("/marketplace/")) {
     return null;
   }
+  const pathSegments = url.pathname.toLocaleLowerCase("en").split("/").filter(Boolean);
+  if (pathSegments.at(-1) !== "vehicles") return null;
   const query = url.searchParams.get("query")?.trim() ?? "";
   return query.length === 0 ? null : query;
+}
+
+async function waitForMarketplaceResults(page: Page): Promise<void> {
+  try {
+    await page.locator(FACEBOOK_MARKETPLACE_ITEM_SELECTOR).first().waitFor({
+      state: "attached",
+      timeout: FACEBOOK_RESULTS_TIMEOUT_MS
+    });
+  } catch (error: unknown) {
+    // A card timeout can be a legitimate empty-results page. The scanner's
+    // page classifier owns that distinction after navigation has settled.
+    if (!(error instanceof errors.TimeoutError)) throw error;
+  }
 }
 
 function normalizeQuery(value: string): string {
