@@ -10,10 +10,12 @@ import type {
 import { BrowserStatusPanel } from "./features/browser/BrowserStatusPanel.js";
 import { SearchDashboard } from "./features/searches/SearchDashboard.js";
 import { FacebookHealthPanel } from "./features/health/FacebookHealthPanel.js";
+import { ListingDashboard } from "./features/listings/ListingDashboard.js";
 import { fetchHealth } from "./health.js";
 import type { BrowserApiClient } from "./lib/api/browser.js";
 import type { SearchApiClient } from "./lib/api/searches.js";
 import type { FacebookHealthApiClient } from "./lib/api/facebook-health.js";
+import type { ListingApiClient, ListingSummary } from "./lib/api/listings.js";
 
 export const appName = "Dealfinder" as const;
 const distanceDisclosure = "Distances are approximate straight-line measurements between locality centroids, not routes or travel times. Locality data uses bundled offline Portuguese centroids.";
@@ -32,6 +34,9 @@ export interface AppProps {
   initialBrowserStatus?: BrowserStatus;
   facebookHealthClient?: FacebookHealthApiClient;
   initialFacebookHealth?: FacebookAcquisitionHealth;
+  listingsClient?: ListingApiClient;
+  initialListings?: readonly ListingSummary[];
+  initialView?: "searches" | "inbox";
 }
 
 export function App({
@@ -42,8 +47,14 @@ export function App({
   browserClient,
   initialBrowserStatus,
   facebookHealthClient,
-  initialFacebookHealth
+  initialFacebookHealth,
+  listingsClient,
+  initialListings,
+  initialView
 }: AppProps = {}): ReactElement {
+  const [view, setView] = useState<"searches" | "inbox">(
+    initialView ?? (typeof window !== "undefined" && window.location.hash === "#inbox" ? "inbox" : "searches")
+  );
   const [healthState, setHealthState] = useState<HealthState>(
     initialHealth ?? { phase: "loading" }
   );
@@ -63,10 +74,17 @@ export function App({
     if (initialHealth === undefined) void refreshHealth();
   }, [initialHealth, refreshHealth]);
 
+  useEffect(() => {
+    if (initialView !== undefined || typeof window === "undefined") return undefined;
+    const updateView = (): void => setView(window.location.hash === "#inbox" ? "inbox" : "searches");
+    window.addEventListener("hashchange", updateView);
+    return () => window.removeEventListener("hashchange", updateView);
+  }, [initialView]);
+
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="wordmark" href="#searches" aria-label="Dealfinder saved searches">
+        <a className="wordmark" href="#searches" aria-label="Dealfinder saved searches" onClick={() => setView("searches")}>
           <span className="wordmark-mark" aria-hidden="true">df</span>
           <span>{appName}</span>
         </a>
@@ -75,8 +93,8 @@ export function App({
 
       <aside className="sidebar" aria-label="Primary navigation">
         <nav>
-          <a href="#searches" aria-current="page">Searches</a>
-          <span className="nav-disabled" aria-disabled="true">Inbox</span>
+          <a href="#searches" aria-current={view === "searches" ? "page" : undefined} onClick={() => setView("searches")}>Searches</a>
+          <a href="#inbox" aria-current={view === "inbox" ? "page" : undefined} onClick={() => setView("inbox")}>Inbox</a>
           <span className="nav-disabled" aria-disabled="true">Sources</span>
           <span className="nav-disabled" aria-disabled="true">Activity</span>
         </nav>
@@ -92,9 +110,9 @@ export function App({
         </div>
       </aside>
 
-      <main id="searches" className="workspace search-workspace">
+      <main id={view} className={`workspace ${view === "searches" ? "search-workspace" : "inbox-workspace"}`}>
         <HealthRail state={healthState} onRetry={() => void refreshHealth()} />
-        <BrowserStatusPanel
+        {view === "searches" ? <><BrowserStatusPanel
           {...(browserClient === undefined ? {} : { client: browserClient })}
           {...(initialBrowserStatus === undefined ? {} : { initialStatus: initialBrowserStatus })}
         />
@@ -105,7 +123,10 @@ export function App({
         <SearchDashboard
           {...(searchesClient === undefined ? {} : { client: searchesClient })}
           {...(initialSearches === undefined ? {} : { initialSearches })}
-        />
+        /></> : <ListingDashboard
+          {...(listingsClient === undefined ? {} : { client: listingsClient })}
+          {...(initialListings === undefined ? {} : { initialListings })}
+        />}
       </main>
     </div>
   );

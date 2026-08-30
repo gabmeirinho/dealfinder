@@ -33,6 +33,7 @@ import {
   DuplicateMaintenanceWorker,
   ThumbnailStorage
 } from "../modules/duplicates/index.js";
+import { ListingReviewService } from "../modules/workflow/index.js";
 
 export interface ApplicationOptions {
   config: ServerConfig;
@@ -145,6 +146,7 @@ export function createApplicationRuntime(
     scheduler: () => scheduler
   });
   browser.onOpened(() => scheduler.wake());
+  const listingWorkflow = new ListingReviewService(getDatabase, () => enrichment.wake());
   const server = createHttpServer({
     database: getDatabase,
     browser: () => browser,
@@ -152,6 +154,7 @@ export function createApplicationRuntime(
     scanScheduler: () => scheduler,
     facebookHealth: () => facebookHealth,
     deepseek: () => enrichment,
+    listingWorkflow: () => listingWorkflow,
     ...(options.staticDirectory === undefined
       ? {}
       : { staticDirectory: options.staticDirectory })

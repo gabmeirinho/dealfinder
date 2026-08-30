@@ -73,6 +73,12 @@ export type {
 export { DealScoresRepository } from "./repositories/deal-scores.js";
 export type { StoredDealScore } from "./repositories/deal-scores.js";
 export { DuplicatesRepository } from "./repositories/duplicates.js";
+export { ListingReviewsRepository } from "./repositories/listing-reviews.js";
+export type {
+  ListingNote,
+  ListingReview,
+  ListingReviewState
+} from "./repositories/listing-reviews.js";
 export type {
   SaveThumbnailMetadata,
   StoredDuplicateGroup,

@@ -142,7 +142,7 @@ export class CorrectionsRepository {
     return row === undefined ? undefined : mapProposal(row);
   }
 
-  private getProposalForCorrection(correctionId: string): NormalizationRuleProposal | undefined {
+  public getProposalForCorrection(correctionId: string): NormalizationRuleProposal | undefined {
     const row = this.database.prepare(`
       SELECT id, correction_id, field, source_value_json, replacement_value_json,
              status, created_at, decided_at

@@ -23,6 +23,8 @@ import {
 } from "../integrations/deepseek/index.js";
 import { handleDealScoresRequest } from "../modules/scoring/index.js";
 import { handleDuplicateGroupsRequest } from "../modules/duplicates/index.js";
+import { handleListingReviewRequest } from "../modules/listings/api/index.js";
+import type { ListingReviewService } from "../modules/workflow/index.js";
 
 export interface HttpServerOptions {
   database: () => DatabaseConnection;
@@ -31,6 +33,7 @@ export interface HttpServerOptions {
   scanScheduler?: () => ScanScheduler;
   facebookHealth?: () => FacebookHealthService;
   deepseek?: () => DeepSeekCreditController;
+  listingWorkflow?: () => ListingReviewService;
   staticDirectory?: string;
   now?: () => Date;
 }
@@ -113,6 +116,14 @@ export function createHttpServer(options: HttpServerOptions): Server {
       if (await handleDuplicateGroupsRequest(request, response, url, {
         database: options.database
       })) return;
+
+      if (
+        options.listingWorkflow !== undefined &&
+        await handleListingReviewRequest(request, response, url, {
+          workflow: options.listingWorkflow,
+          now
+        })
+      ) return;
 
       if (await handleSearchesRequest(request, response, url, {
         database: options.database,

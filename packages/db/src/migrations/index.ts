@@ -10,6 +10,7 @@ import { createGeocodingCacheMigration } from "./009-create-geocoding-cache.js";
 import { createEnrichmentProcessingMigration } from "./010-create-enrichment-processing.js";
 import { createDealScoresMigration } from "./011-create-deal-scores.js";
 import { createDuplicateGroupsMigration } from "./012-create-duplicate-groups.js";
+import { createListingReviewWorkflowMigration } from "./013-create-listing-review-workflow.js";
 import type { Migration } from "./types.js";
 
 export const allMigrations: readonly Migration[] = [
@@ -24,7 +25,8 @@ export const allMigrations: readonly Migration[] = [
   createGeocodingCacheMigration,
   createEnrichmentProcessingMigration,
   createDealScoresMigration,
-  createDuplicateGroupsMigration
+  createDuplicateGroupsMigration,
+  createListingReviewWorkflowMigration
 ];
 
 export const LATEST_SCHEMA_VERSION =

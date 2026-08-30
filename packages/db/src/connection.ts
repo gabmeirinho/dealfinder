@@ -18,6 +18,7 @@ import { GeocodingRepository } from "./repositories/geocoding.js";
 import { EnrichmentProcessingRepository } from "./repositories/enrichment-processing.js";
 import { DealScoresRepository } from "./repositories/deal-scores.js";
 import { DuplicatesRepository } from "./repositories/duplicates.js";
+import { ListingReviewsRepository } from "./repositories/listing-reviews.js";
 import { withTransaction } from "./transactions.js";
 
 export interface OpenDatabaseOptions {
@@ -43,6 +44,7 @@ export interface DatabaseConnection {
   readonly enrichmentProcessing: EnrichmentProcessingRepository;
   readonly dealScores: DealScoresRepository;
   readonly duplicates: DuplicatesRepository;
+  readonly listingReviews: ListingReviewsRepository;
   transaction<T>(operation: () => T): T;
   close(): void;
 }
@@ -89,6 +91,7 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseConnection {
     const enrichmentProcessing = new EnrichmentProcessingRepository(database);
     const dealScores = new DealScoresRepository(database);
     const duplicates = new DuplicatesRepository(database);
+    const listingReviews = new ListingReviewsRepository(database);
     let closed = false;
 
     return {
@@ -108,6 +111,7 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseConnection {
       enrichmentProcessing,
       dealScores,
       duplicates,
+      listingReviews,
       transaction: <T>(operation: () => T) => withTransaction(database, operation),
       close: () => {
         if (closed) return;
