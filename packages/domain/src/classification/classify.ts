@@ -6,22 +6,24 @@ import type {
   MatchedListingPattern
 } from "./types.js";
 
-export const LISTING_CLASSIFIER_VERSION = 1;
+export const LISTING_CLASSIFIER_VERSION = 2;
 
 const PATTERNS = {
   collectible: [
     "hot wheel", "hot wheels", "hotwheels", "miniatura", "die-cast", "1/18", "1/43", "maquete", "brinquedo"
   ],
   part: [
-    "peças", "jantes", "pneus", "rodas de ferro", "espaçadores", "volante", "palas",
-    "tablier", "rádio", "quadrante", "painel", "chave secundária", "capa de volante"
+    "peça", "peças", "jante", "jantes", "pneu", "pneus", "rodas de ferro", "espaçador",
+    "espaçadores", "volante", "volantes", "banco", "bancos", "palas", "tablier", "rádio",
+    "quadrante", "painel", "chave secundária", "chave de rodas", "capa de volante", "macaco",
+    "alargador", "alargadores", "calha da água"
   ],
   body_or_light: [
     "farol", "farolim", "faróis", "capô", "para-choque", "guarda-lamas", "grelha",
-    "retrovisor", "espelho", "chuventos", "tecto de abrir", "aileron", "spoiler"
+    "retrovisor", "espelho", "chuventos", "tecto de abrir", "teto de abrir", "aileron", "spoiler"
   ],
   mechanical_or_electrical: [
-    "bateria", "módulo", "motor", "centralina", "medidor de massa de ar",
+    "bateria", "módulo", "módulos", "motor", "centralina", "medidor de massa de ar",
     "barra estabilizadora", "sofagem", "fita de airbag"
   ],
   printed_material: ["catálogo", "apresentação"]
