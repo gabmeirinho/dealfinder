@@ -15,6 +15,7 @@ import {
   PlaywrightBrowserAdapter,
   type BrowserAdapter
 } from "../modules/browser/index.js";
+import { ListingIngestionService } from "../modules/listings/index.js";
 import { SearchVerificationService } from "../modules/search-verification/index.js";
 import { ScanScheduler } from "../modules/scheduler/index.js";
 import { DiagnosticsService } from "../modules/diagnostics/index.js";
@@ -164,6 +165,11 @@ export function createApplicationRuntime(
       name: "database",
       start: () => {
         database = openDatabase({ filename: options.config.paths.sqlitePath });
+        const backfilled = new ListingIngestionService(getDatabase)
+          .backfillClassifications(new Date().toISOString());
+        if (backfilled > 0) {
+          logger.info("Listing classifications backfilled", { count: backfilled });
+        }
       },
       stop: () => {
         database?.close();

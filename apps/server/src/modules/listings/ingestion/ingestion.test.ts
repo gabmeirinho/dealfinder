@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { openDatabase, type DatabaseConnection } from "@dealfinder/db";
-import { createVehicleSearchDraft } from "@dealfinder/domain";
+import { classifyListing, createVehicleSearchDraft } from "@dealfinder/domain";
 
 import { ListingIngestionService, parseDisplayedEuroPrice } from "./service.js";
 
@@ -225,6 +225,35 @@ describe("listing ingestion", () => {
       .toMatchObject({ eligible: false });
     expect(setup.database.enrichmentProcessing.getQueueItem(listing?.id as number)).toBeUndefined();
   });
+
+  it("backfills missing and stale classifications idempotently", () => {
+    const setup = createSetup();
+    database = setup.database;
+    const service = new ListingIngestionService(() => setup.database);
+    const excluded = createStoredListing(setup, "Bancos Volkswagen Golf 4", "100000000000005");
+    const kept = createStoredListing(setup, "Volkswagen Golf 1.6 TDI 2018", "100000000000006");
+
+    expect(service.backfillClassifications("2026-08-23T09:00:00.000Z")).toBe(2);
+    expect(setup.database.listingClassifications.get(excluded.id)).toMatchObject({
+      version: 2,
+      decision: "exclude",
+      subject: "part_or_accessory"
+    });
+    expect(setup.database.listingClassifications.get(kept.id)).toMatchObject({
+      version: 2,
+      decision: "continue"
+    });
+    expect(service.backfillClassifications("2026-08-23T10:00:00.000Z")).toBe(0);
+
+    const stale = classifyListing({ title: "Bancos Volkswagen Golf 4" });
+    setup.database.listingClassifications.save(
+      excluded.id,
+      { ...stale, version: 1 },
+      "2026-08-23T11:00:00.000Z"
+    );
+    expect(service.backfillClassifications("2026-08-23T12:00:00.000Z")).toBe(1);
+    expect(setup.database.listingClassifications.get(excluded.id)?.version).toBe(2);
+  });
 });
 
 function createSetup() {
@@ -245,6 +274,30 @@ function scan(
 
 function candidate(overrides: Partial<ReturnType<typeof baseCandidate>> = {}) {
   return { ...baseCandidate(), ...overrides };
+}
+
+function createStoredListing(
+  setup: ReturnType<typeof createSetup>,
+  title: string,
+  sourceListingId: string
+) {
+  const raw = setup.database.rawCandidates.saveObservation({
+    searchId: setup.searchId,
+    observedAt: "2026-08-23T09:00:00.000Z",
+    candidate: candidate({ title, sourceListingId })
+  });
+  return setup.database.listings.ingestObservation({
+    rawCandidateId: raw.candidate.id,
+    searchId: setup.searchId,
+    observedAt: "2026-08-23T09:00:00.000Z",
+    initialScan: false,
+    source: "facebook",
+    sourceListingId,
+    listingUrl: raw.candidate.listingUrl,
+    title: raw.observation.title,
+    displayedPrice: raw.observation.displayedPrice,
+    priceCents: 1_495_000
+  }).listing;
 }
 
 function baseCandidate() {

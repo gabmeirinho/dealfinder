@@ -4,6 +4,7 @@ import {
   applyReusableRules,
   assessVehicleRisk,
   classifyListing,
+  LISTING_CLASSIFIER_VERSION,
   evaluateVehicleMatch,
   normalizeEuroPrice,
   normalizeVehicleFacts,
@@ -44,6 +45,23 @@ export interface ListingScanIngestionResult {
 
 export class ListingIngestionService {
   public constructor(private readonly database: () => DatabaseConnection) {}
+
+  public backfillClassifications(classifiedAt: string): number {
+    const database = this.database();
+    return database.transaction(() => {
+      const candidates = database.listingClassifications.listNeedingVersion(
+        LISTING_CLASSIFIER_VERSION
+      );
+      for (const candidate of candidates) {
+        database.listingClassifications.save(
+          candidate.listingId,
+          classifyListing({ title: candidate.title }),
+          classifiedAt
+        );
+      }
+      return candidates.length;
+    });
+  }
 
   public ingestScan(input: IngestListingScan): ListingScanIngestionResult {
     const database = this.database();

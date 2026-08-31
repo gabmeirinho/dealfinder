@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { openDatabase } from "@dealfinder/db";
+import { allMigrations, openDatabase } from "@dealfinder/db";
 import { createVehicleSearchDraft } from "@dealfinder/domain";
 
 import { loadServerConfig } from "../config/index.js";
@@ -70,6 +70,56 @@ describe("application runtime", () => {
     await application.scheduler.whenIdle();
 
     expect(application.database?.scanRuns.hasSucceeded(search.id)).toBe(true);
+  });
+
+  it("backfills legacy listing classifications before the runtime starts", async () => {
+    directory = mkdtempSync(join(tmpdir(), "dealfinder-runtime-"));
+    const config = loadServerConfig({ env: { DEALFINDER_DATA_DIR: directory } });
+    config.server.port = 0;
+    const seed = openDatabase({
+      filename: config.paths.sqlitePath,
+      migrations: allMigrations.slice(0, 13)
+    });
+    const draft = createVehicleSearchDraft("Golf");
+    draft.criteria.makeKeywords = { value: ["Volkswagen"], strength: "hard" };
+    const search = seed.searches.create(draft);
+    const raw = seed.rawCandidates.saveObservation({
+      searchId: search.id,
+      observedAt: "2026-08-23T09:00:00.000Z",
+      candidate: {
+        source: "facebook",
+        sourceListingId: "100000000000005",
+        url: "https://www.facebook.com/marketplace/item/100000000000005/",
+        title: "Bancos Volkswagen Golf 4",
+        displayedPrice: "500 €",
+        location: "Lisboa",
+        thumbnailUrl: null,
+        rawCardFacts: []
+      }
+    });
+    const listing = seed.listings.ingestObservation({
+      rawCandidateId: raw.candidate.id,
+      searchId: search.id,
+      observedAt: "2026-08-23T09:00:00.000Z",
+      initialScan: false,
+      source: "facebook",
+      sourceListingId: raw.candidate.sourceListingId,
+      listingUrl: raw.candidate.listingUrl,
+      title: raw.observation.title,
+      displayedPrice: raw.observation.displayedPrice,
+      priceCents: 50_000
+    }).listing;
+    seed.close();
+
+    application = createApplicationRuntime({ config });
+    await application.start();
+
+    expect(application.database?.listingClassifications.get(listing.id)).toMatchObject({
+      version: 2,
+      subject: "part_or_accessory",
+      decision: "exclude"
+    });
+    expect(application.database?.listingClassifications.listNeedingVersion(2)).toEqual([]);
   });
 });
 

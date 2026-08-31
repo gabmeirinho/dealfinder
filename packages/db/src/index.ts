@@ -80,7 +80,10 @@ export type {
   ListingReviewState
 } from "./repositories/listing-reviews.js";
 export { ListingClassificationsRepository } from "./repositories/listing-classifications.js";
-export type { StoredListingClassification } from "./repositories/listing-classifications.js";
+export type {
+  ListingClassificationCandidate,
+  StoredListingClassification
+} from "./repositories/listing-classifications.js";
 export type {
   SaveThumbnailMetadata,
   StoredDuplicateGroup,

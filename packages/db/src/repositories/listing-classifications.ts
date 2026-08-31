@@ -20,8 +20,30 @@ export interface StoredListingClassification extends ListingClassification {
   classifiedAt: string;
 }
 
+export interface ListingClassificationCandidate {
+  listingId: number;
+  title: string;
+}
+
 export class ListingClassificationsRepository {
   public constructor(private readonly database: DatabaseSync) {}
+
+  public listNeedingVersion(version: number): ListingClassificationCandidate[] {
+    if (!Number.isSafeInteger(version) || version < 1) {
+      throw new Error("Classifier version must be a positive integer");
+    }
+    return (this.database.prepare(`
+      SELECT listings.id AS listing_id, listings.title
+      FROM listings
+      LEFT JOIN listing_classifications classification
+        ON classification.listing_id = listings.id
+      WHERE classification.listing_id IS NULL OR classification.classifier_version <> ?
+      ORDER BY listings.id ASC
+    `).all(version) as unknown as Array<{ listing_id: number; title: string }>).map((row) => ({
+      listingId: row.listing_id,
+      title: row.title
+    }));
+  }
 
   public save(
     listingId: number,
