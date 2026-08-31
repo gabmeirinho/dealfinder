@@ -19,6 +19,7 @@ import { EnrichmentProcessingRepository } from "./repositories/enrichment-proces
 import { DealScoresRepository } from "./repositories/deal-scores.js";
 import { DuplicatesRepository } from "./repositories/duplicates.js";
 import { ListingReviewsRepository } from "./repositories/listing-reviews.js";
+import { ListingClassificationsRepository } from "./repositories/listing-classifications.js";
 import { withTransaction } from "./transactions.js";
 
 export interface OpenDatabaseOptions {
@@ -45,6 +46,7 @@ export interface DatabaseConnection {
   readonly dealScores: DealScoresRepository;
   readonly duplicates: DuplicatesRepository;
   readonly listingReviews: ListingReviewsRepository;
+  readonly listingClassifications: ListingClassificationsRepository;
   transaction<T>(operation: () => T): T;
   close(): void;
 }
@@ -92,6 +94,7 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseConnection {
     const dealScores = new DealScoresRepository(database);
     const duplicates = new DuplicatesRepository(database);
     const listingReviews = new ListingReviewsRepository(database);
+    const listingClassifications = new ListingClassificationsRepository(database);
     let closed = false;
 
     return {
@@ -112,6 +115,7 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseConnection {
       dealScores,
       duplicates,
       listingReviews,
+      listingClassifications,
       transaction: <T>(operation: () => T) => withTransaction(database, operation),
       close: () => {
         if (closed) return;

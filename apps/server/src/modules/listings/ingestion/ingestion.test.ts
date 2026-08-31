@@ -174,6 +174,57 @@ describe("listing ingestion", () => {
     expect(parseDisplayedEuroPrice("Grátis")).toBe(0);
     expect(parseDisplayedEuroPrice("Contactar vendedor")).toBeNull();
   });
+
+  it("classifies supplied non-vehicle patterns before enrichment", () => {
+    const setup = createSetup();
+    database = setup.database;
+    const service = new ListingIngestionService(() => setup.database);
+
+    service.ingestScan(scan(setup.searchId, "2026-08-23T09:00:00.000Z", false, [
+      candidate({ title: "Jantes Volkswagen Golf", sourceListingId: "100000000000002" })
+    ]));
+
+    const listing = setup.database.listings.getBySource("facebook", "100000000000002");
+    expect(setup.database.listingClassifications.get(listing?.id as number)).toMatchObject({
+      subject: "part_or_accessory",
+      decision: "exclude",
+      matchedPatterns: [{ category: "part", pattern: "jantes" }]
+    });
+    expect(setup.database.normalizedVehicles.getFacts(listing?.id as number)).toBeUndefined();
+    expect(setup.database.enrichmentProcessing.getQueueItem(listing?.id as number)).toBeUndefined();
+  });
+
+  it("records parts-only cars as vehicles while excluding them from enrichment", () => {
+    const setup = createSetup();
+    database = setup.database;
+    const service = new ListingIngestionService(() => setup.database);
+
+    service.ingestScan(scan(setup.searchId, "2026-08-23T09:00:00.000Z", false, [
+      candidate({ title: "Volkswagen Golf só para peças", sourceListingId: "100000000000003" })
+    ]));
+
+    const listing = setup.database.listings.getBySource("facebook", "100000000000003");
+    expect(setup.database.listingClassifications.get(listing?.id as number)).toMatchObject({
+      subject: "whole_vehicle",
+      condition: "parts_only",
+      decision: "exclude"
+    });
+  });
+
+  it("does not enrich titles that fail hard search criteria", () => {
+    const setup = createSetup();
+    database = setup.database;
+    const service = new ListingIngestionService(() => setup.database);
+
+    service.ingestScan(scan(setup.searchId, "2026-08-23T09:00:00.000Z", false, [
+      candidate({ title: "Oeiras", sourceListingId: "100000000000004" })
+    ]));
+
+    const listing = setup.database.listings.getBySource("facebook", "100000000000004");
+    expect(setup.database.normalizedVehicles.getMatch(listing?.id as number, setup.searchId))
+      .toMatchObject({ eligible: false });
+    expect(setup.database.enrichmentProcessing.getQueueItem(listing?.id as number)).toBeUndefined();
+  });
 });
 
 function createSetup() {

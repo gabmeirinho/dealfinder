@@ -53,6 +53,25 @@ describe("Facebook Marketplace result parser", () => {
     });
   });
 
+  it("does not mistake a crossed-out previous price for the title", () => {
+    const result = parseFacebookResultPage(`
+      <main data-dealfinder-results-contract="1">
+        <article data-dealfinder-card="marketplace-item">
+          <a href="/marketplace/item/100000000000010/">
+            <span>16 300 €</span><span>21 000 €</span>
+            <span>Volkswagen Golf 6 GTI DSG</span><span>Lisboa</span>
+          </a>
+        </article>
+      </main>
+    `);
+
+    expect(result.candidates[0]).toMatchObject({
+      displayedPrice: "16 300 €",
+      title: "Volkswagen Golf 6 GTI DSG",
+      location: "Lisboa"
+    });
+  });
+
   it("extracts cards using Facebook's np item route", () => {
     const result = parseFacebookResultPage(fixture("results-np-v1.html"));
 

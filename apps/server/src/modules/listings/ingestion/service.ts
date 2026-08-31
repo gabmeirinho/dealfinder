@@ -3,6 +3,7 @@ import {
   applyFactCorrections,
   applyReusableRules,
   assessVehicleRisk,
+  classifyListing,
   evaluateVehicleMatch,
   normalizeEuroPrice,
   normalizeVehicleFacts,
@@ -93,6 +94,14 @@ export class ListingIngestionService {
         if (ingested.priceChanged) priceChanges += 1;
         if (ingested.event !== null) events.push(ingested.event);
 
+        const classification = classifyListing({ title: candidate.title });
+        database.listingClassifications.save(
+          ingested.listing.id,
+          classification,
+          input.observedAt
+        );
+        if (classification.decision === "exclude") continue;
+
         const normalized = applyReusableRules(normalizeVehicleFacts({
           title: candidate.title,
           description: candidate.description ?? null,
@@ -116,13 +125,16 @@ export class ListingIngestionService {
           assessVehicleRisk(effective),
           input.observedAt
         );
+        const match = evaluateVehicleMatch(effective, search.criteria);
         database.normalizedVehicles.saveMatch(
           ingested.listing.id,
           input.searchId,
-          evaluateVehicleMatch(effective, search.criteria),
+          match,
           input.observedAt
         );
-        database.enrichmentProcessing.enqueue(ingested.listing.id, input.observedAt);
+        if (match.eligible) {
+          database.enrichmentProcessing.enqueue(ingested.listing.id, input.observedAt);
+        }
       }
 
       const missed = input.completeSnapshot

@@ -44,6 +44,11 @@ export class ListingReviewService {
       parameters.push(filters.searchId);
     }
     if (filters.risk === true) conditions.push("risk.high_risk_verify_price = 1");
+    conditions.push("(classification.decision IS NULL OR classification.decision <> 'exclude')");
+    conditions.push(`EXISTS (
+      SELECT 1 FROM listing_match_evaluations visible_match
+      WHERE visible_match.listing_id = listings.id AND visible_match.eligible = 1
+    )`);
     if (filters.query !== undefined && filters.query.trim() !== "") {
       conditions.push("(listings.title LIKE ? OR facts.make LIKE ? OR facts.model LIKE ?)");
       const query = `%${filters.query.trim().slice(0, 100).replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
@@ -55,6 +60,7 @@ export class ListingReviewService {
       JOIN listing_reviews reviews ON reviews.listing_id = listings.id
       LEFT JOIN normalized_vehicle_facts facts ON facts.listing_id = listings.id
       LEFT JOIN listing_risk_assessments risk ON risk.listing_id = listings.id
+      LEFT JOIN listing_classifications classification ON classification.listing_id = listings.id
       WHERE ${conditions.join(" AND ")}
       ORDER BY COALESCE((SELECT max(total_score) FROM listing_deal_scores scores
                          WHERE scores.listing_id = listings.id), -1) DESC,
@@ -114,6 +120,7 @@ export class ListingReviewService {
       },
       notes: database.listingReviews.listNotes(listingId),
       processing: database.enrichmentProcessing.getQueueItem(listingId) ?? null,
+      classification: database.listingClassifications.get(listingId) ?? null,
       enrichment: database.enrichmentProcessing.getEnrichment(listingId) ?? null,
       location: observation?.location ?? null,
       sellerMessage: sellerMessage(effectiveFacts, listing.title),
@@ -200,7 +207,8 @@ export class ListingReviewService {
       facts: effective,
       risk: database.normalizedVehicles.getRisk(listingId) ?? null,
       score: topScore?.score ?? null,
-      processing: database.enrichmentProcessing.getQueueItem(listingId) ?? null
+      processing: database.enrichmentProcessing.getQueueItem(listingId) ?? null,
+      classification: database.listingClassifications.get(listingId) ?? null
     };
   }
 }

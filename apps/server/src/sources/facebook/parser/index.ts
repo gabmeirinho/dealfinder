@@ -168,7 +168,9 @@ function inferPrice(texts: readonly string[]): string | null {
 
 function inferTitle(texts: readonly string[], price: string | null): string | null {
   return texts.find((text) =>
-    text !== price && !/^(?:sponsored|patrocinado|save|guardar)$/iu.test(text)
+    text !== price &&
+    !PRICE_PATTERN.test(text) &&
+    !/^(?:sponsored|patrocinado|save|guardar)$/iu.test(text)
   ) ?? null;
 }
 
