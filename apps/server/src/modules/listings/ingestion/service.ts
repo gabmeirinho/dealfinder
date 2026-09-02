@@ -53,11 +53,15 @@ export class ListingIngestionService {
         LISTING_CLASSIFIER_VERSION
       );
       for (const candidate of candidates) {
+        const classification = classifyListing({ title: candidate.title });
         database.listingClassifications.save(
           candidate.listingId,
-          classifyListing({ title: candidate.title }),
+          classification,
           classifiedAt
         );
+        if (classification.decision === "exclude") {
+          database.enrichmentProcessing.cancelExcluded(candidate.listingId);
+        }
       }
       return candidates.length;
     });
@@ -118,7 +122,10 @@ export class ListingIngestionService {
           classification,
           input.observedAt
         );
-        if (classification.decision === "exclude") continue;
+        if (classification.decision === "exclude") {
+          database.enrichmentProcessing.cancelExcluded(ingested.listing.id);
+          continue;
+        }
 
         const normalized = applyReusableRules(normalizeVehicleFacts({
           title: candidate.title,

@@ -254,6 +254,31 @@ describe("listing ingestion", () => {
     expect(service.backfillClassifications("2026-08-23T12:00:00.000Z")).toBe(1);
     expect(setup.database.listingClassifications.get(excluded.id)?.version).toBe(2);
   });
+
+  it("cancels existing enrichment when a listing is reclassified as excluded", () => {
+    const setup = createSetup();
+    database = setup.database;
+    const service = new ListingIngestionService(() => setup.database);
+    service.ingestScan(scan(setup.searchId, "2026-08-23T09:00:00.000Z", false, [candidate()]));
+
+    const listing = setup.database.listings.getBySource("facebook", candidate().sourceListingId);
+    expect(setup.database.enrichmentProcessing.getQueueItem(listing?.id as number)?.state).toBe("queued");
+
+    service.ingestScan(scan(setup.searchId, "2026-08-23T10:00:00.000Z", false, [
+      candidate({ title: "Bancos Volkswagen Golf 4" })
+    ]));
+
+    expect(setup.database.listingClassifications.get(listing?.id as number)).toMatchObject({
+      decision: "exclude",
+      subject: "part_or_accessory"
+    });
+    expect(setup.database.enrichmentProcessing.getQueueItem(listing?.id as number)).toMatchObject({
+      state: "cancelled",
+      lastErrorCode: "excluded_by_classifier"
+    });
+    expect(setup.database.normalizedVehicles.getFacts(listing?.id as number)).toBeDefined();
+    expect(setup.database.enrichmentProcessing.claimNext("2026-08-23T11:00:00.000Z")).toBeUndefined();
+  });
 });
 
 function createSetup() {

@@ -28,7 +28,7 @@ describe("database migrations", () => {
 
     expect(testDatabase.connection.migrationResult).toEqual({
       currentVersion: LATEST_SCHEMA_VERSION,
-      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     });
     const migrations = testDatabase.connection.database
       .prepare("SELECT version, name FROM schema_migrations ORDER BY version")
@@ -47,7 +47,8 @@ describe("database migrations", () => {
       { version: 11, name: "create_deal_scores" },
       { version: 12, name: "create_duplicate_groups" },
       { version: 13, name: "create_listing_review_workflow" },
-      { version: 14, name: "create_listing_classifications" }
+      { version: 14, name: "create_listing_classifications" },
+      { version: 15, name: "allow_cancelled_processing_queue" }
     ]);
   });
 
@@ -107,7 +108,7 @@ describe("database migrations", () => {
     });
 
     const result = runMigrations(database.database, allMigrations, () => new Date("2026-08-23"));
-    expect(result.appliedVersions).toEqual([7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(result.appliedVersions).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15]);
     const listing = database.database.prepare(`
       SELECT id, discovery_kind FROM listings WHERE source_listing_id = ?
     `).get("100000000000001") as unknown as { id: number; discovery_kind: string };
@@ -115,6 +116,54 @@ describe("database migrations", () => {
     expect(database.database.prepare(`
       SELECT type, alertable FROM listing_events WHERE listing_id = ?
     `).all(listing.id)).toEqual([{ type: "new_listing", alertable: 0 }]);
+    database.close();
+  });
+
+  it("preserves existing queue rows when enabling classifier cancellation", () => {
+    const database = openDatabase({
+      filename: ":memory:",
+      migrations: allMigrations.slice(0, 14)
+    });
+    const draft = createVehicleSearchDraft("Existing queue listing");
+    draft.criteria.makeKeywords = { value: ["BMW"], strength: "hard" };
+    const search = database.searches.create(draft);
+    const raw = database.rawCandidates.saveObservation({
+      searchId: search.id,
+      observedAt: "2026-08-23T09:00:00.000Z",
+      candidate: {
+        source: "facebook",
+        sourceListingId: "100000000000007",
+        url: "https://www.facebook.com/marketplace/item/100000000000007/",
+        title: "BMW 320d 2020",
+        displayedPrice: "24 900 €",
+        location: "Lisboa",
+        thumbnailUrl: null,
+        rawCardFacts: []
+      }
+    });
+    const listing = database.listings.ingestObservation({
+      rawCandidateId: raw.candidate.id,
+      searchId: search.id,
+      observedAt: "2026-08-23T09:00:00.000Z",
+      initialScan: false,
+      source: "facebook",
+      sourceListingId: raw.candidate.sourceListingId,
+      listingUrl: raw.candidate.listingUrl,
+      title: raw.observation.title,
+      displayedPrice: raw.observation.displayedPrice,
+      priceCents: 2_490_000
+    }).listing;
+    database.enrichmentProcessing.enqueue(listing.id, "2026-08-23T09:00:00.000Z");
+
+    expect(runMigrations(database.database, allMigrations, () => new Date("2026-08-23")))
+      .toEqual({ currentVersion: 15, appliedVersions: [15] });
+    expect(database.enrichmentProcessing.getQueueItem(listing.id)).toMatchObject({ state: "queued" });
+
+    database.database.prepare(`
+      UPDATE processing_queue SET state = 'cancelled', last_error_code = 'excluded_by_classifier'
+      WHERE listing_id = ?
+    `).run(listing.id);
+    expect(database.enrichmentProcessing.getQueueItem(listing.id)).toMatchObject({ state: "cancelled" });
     database.close();
   });
 });

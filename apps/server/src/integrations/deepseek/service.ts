@@ -10,6 +10,7 @@ export type EnrichmentProcessResult =
   | "succeeded"
   | "failed"
   | "retry_queued"
+  | "excluded"
   | "credit_paused";
 
 export interface DeepSeekEnrichmentServiceOptions {
@@ -45,6 +46,14 @@ export class DeepSeekEnrichmentService {
     const startedAt = this.#now().toISOString();
     const claim = database.enrichmentProcessing.claimNext(startedAt);
     if (claim === undefined) return "idle";
+    if (database.listingClassifications.get(claim.listingId)?.decision === "exclude") {
+      database.enrichmentProcessing.cancelClaim(claim, this.#now().toISOString());
+      this.#logger.info(
+        "DeepSeek enrichment skipped excluded listing",
+        safeContext(claim, "excluded_by_classifier")
+      );
+      return "excluded";
+    }
     const stored = database.normalizedVehicles.getFacts(claim.listingId);
     if (stored === undefined) {
       database.enrichmentProcessing.completeFailure(

@@ -75,7 +75,7 @@ export class DeepSeekEnrichmentWorker {
   private async drain(): Promise<void> {
     while (this.#running) {
       const result = await this.#service.processNext();
-      if (result === "succeeded" || result === "failed" || result === "retry_queued") continue;
+      if (result === "succeeded" || result === "failed" || result === "retry_queued" || result === "excluded") continue;
       return;
     }
   }
