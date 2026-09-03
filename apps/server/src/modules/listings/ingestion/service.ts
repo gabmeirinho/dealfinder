@@ -3,6 +3,8 @@ import {
   applyFactCorrections,
   applyReusableRules,
   assessVehicleRisk,
+  classifyListing,
+  LISTING_CLASSIFIER_VERSION,
   evaluateVehicleMatch,
   normalizeEuroPrice,
   normalizeVehicleFacts,
@@ -43,6 +45,27 @@ export interface ListingScanIngestionResult {
 
 export class ListingIngestionService {
   public constructor(private readonly database: () => DatabaseConnection) {}
+
+  public backfillClassifications(classifiedAt: string): number {
+    const database = this.database();
+    return database.transaction(() => {
+      const candidates = database.listingClassifications.listNeedingVersion(
+        LISTING_CLASSIFIER_VERSION
+      );
+      for (const candidate of candidates) {
+        const classification = classifyListing({ title: candidate.title });
+        database.listingClassifications.save(
+          candidate.listingId,
+          classification,
+          classifiedAt
+        );
+        if (classification.decision === "exclude") {
+          database.enrichmentProcessing.cancelExcluded(candidate.listingId);
+        }
+      }
+      return candidates.length;
+    });
+  }
 
   public ingestScan(input: IngestListingScan): ListingScanIngestionResult {
     const database = this.database();
@@ -93,6 +116,17 @@ export class ListingIngestionService {
         if (ingested.priceChanged) priceChanges += 1;
         if (ingested.event !== null) events.push(ingested.event);
 
+        const classification = classifyListing({ title: candidate.title });
+        database.listingClassifications.save(
+          ingested.listing.id,
+          classification,
+          input.observedAt
+        );
+        if (classification.decision === "exclude") {
+          database.enrichmentProcessing.cancelExcluded(ingested.listing.id);
+          continue;
+        }
+
         const normalized = applyReusableRules(normalizeVehicleFacts({
           title: candidate.title,
           description: candidate.description ?? null,
@@ -116,13 +150,16 @@ export class ListingIngestionService {
           assessVehicleRisk(effective),
           input.observedAt
         );
+        const match = evaluateVehicleMatch(effective, search.criteria);
         database.normalizedVehicles.saveMatch(
           ingested.listing.id,
           input.searchId,
-          evaluateVehicleMatch(effective, search.criteria),
+          match,
           input.observedAt
         );
-        database.enrichmentProcessing.enqueue(ingested.listing.id, input.observedAt);
+        if (match.eligible) {
+          database.enrichmentProcessing.enqueue(ingested.listing.id, input.observedAt);
+        }
       }
 
       const missed = input.completeSnapshot

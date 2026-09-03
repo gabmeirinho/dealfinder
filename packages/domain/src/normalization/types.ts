@@ -7,6 +7,22 @@ export interface OriginalVehicleText {
   cardFacts: readonly string[];
 }
 
+/**
+ * Allowlisted vehicle facts supplied by a marketplace's structured listing
+ * metadata. Values are optional because marketplaces commonly omit fields.
+ * These facts are never populated from seller identity, contact, or URLs.
+ */
+export interface StructuredVehicleFacts {
+  year?: number | null;
+  mileageKm?: number | null;
+  make?: string | null;
+  model?: string | null;
+  variant?: string | null;
+  fuel?: FuelType | null;
+  transmission?: TransmissionType | null;
+  powerHp?: number | null;
+}
+
 /** Deliberately excludes seller names, profile URLs, contacts, and identifiers. */
 export interface CoarseSellerSignals {
   type: SellerType | null;
@@ -54,6 +70,7 @@ export interface NormalizedVehicleFacts {
 export interface NormalizeVehicleInput extends OriginalVehicleText {
   referenceYear: number;
   seller?: Partial<CoarseSellerSignals>;
+  structuredFacts?: StructuredVehicleFacts;
 }
 
 export interface FactCorrection {

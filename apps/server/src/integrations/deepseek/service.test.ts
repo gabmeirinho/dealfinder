@@ -4,7 +4,11 @@ import { once } from "node:events";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { openDatabase, type DatabaseConnection } from "@dealfinder/db";
-import { createVehicleSearchDraft, type VehicleEnrichment } from "@dealfinder/domain";
+import {
+  classifyListing,
+  createVehicleSearchDraft,
+  type VehicleEnrichment
+} from "@dealfinder/domain";
 
 import { DeepSeekClient } from "./client.js";
 import { DeepSeekEnrichmentService } from "./service.js";
@@ -90,6 +94,29 @@ describe("DeepSeek enrichment service", () => {
     const output = logs.join("\n");
     expect(output).not.toContain("deepseek-secret-test-key");
     expect(output).not.toMatch(/BMW 320d|79 500 km|balance exhausted|cookie|seller_contact|profile_url/i);
+  });
+
+  it("does not send classifier-excluded queued work to DeepSeek", async () => {
+    let requests = 0;
+    const url = await startServer((_path, response) => {
+      requests += 1;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(completion(enrichment())));
+    });
+    const setup = setupService(url, ["100000000000001"]);
+    const listingId = setup.listingIds[0]!;
+    database!.listingClassifications.save(
+      listingId,
+      classifyListing({ title: "Bancos Volkswagen Golf 4" }),
+      "2026-08-23T10:05:00.000Z"
+    );
+
+    await expect(setup.service.processNext()).resolves.toBe("idle");
+    expect(requests).toBe(0);
+    expect(database!.enrichmentProcessing.getQueueItem(listingId)).toMatchObject({
+      state: "cancelled",
+      lastErrorCode: "excluded_by_classifier"
+    });
   });
 
   it("requeues rate limits without advancing", async () => {

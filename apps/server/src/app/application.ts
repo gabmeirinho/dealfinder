@@ -15,6 +15,7 @@ import {
   PlaywrightBrowserAdapter,
   type BrowserAdapter
 } from "../modules/browser/index.js";
+import { ListingIngestionService } from "../modules/listings/index.js";
 import { SearchVerificationService } from "../modules/search-verification/index.js";
 import { ScanScheduler } from "../modules/scheduler/index.js";
 import { DiagnosticsService } from "../modules/diagnostics/index.js";
@@ -33,6 +34,8 @@ import {
   DuplicateMaintenanceWorker,
   ThumbnailStorage
 } from "../modules/duplicates/index.js";
+import { ListingReviewService } from "../modules/workflow/index.js";
+import { ListingDetailCaptureService } from "../modules/listings/detail-enrichment/index.js";
 
 export interface ApplicationOptions {
   config: ServerConfig;
@@ -145,6 +148,12 @@ export function createApplicationRuntime(
     scheduler: () => scheduler
   });
   browser.onOpened(() => scheduler.wake());
+  const listingWorkflow = new ListingReviewService(getDatabase, () => enrichment.wake());
+  const listingDetailCapture = new ListingDetailCaptureService({
+    database: getDatabase,
+    browser: () => browser,
+    processingWake: () => enrichment.wake()
+  });
   const server = createHttpServer({
     database: getDatabase,
     browser: () => browser,
@@ -152,6 +161,8 @@ export function createApplicationRuntime(
     scanScheduler: () => scheduler,
     facebookHealth: () => facebookHealth,
     deepseek: () => enrichment,
+    listingWorkflow: () => listingWorkflow,
+    listingDetailCapture: () => listingDetailCapture,
     ...(options.staticDirectory === undefined
       ? {}
       : { staticDirectory: options.staticDirectory })
@@ -161,6 +172,11 @@ export function createApplicationRuntime(
       name: "database",
       start: () => {
         database = openDatabase({ filename: options.config.paths.sqlitePath });
+        const backfilled = new ListingIngestionService(getDatabase)
+          .backfillClassifications(new Date().toISOString());
+        if (backfilled > 0) {
+          logger.info("Listing classifications backfilled", { count: backfilled });
+        }
       },
       stop: () => {
         database?.close();

@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createVehicleSearchDraft, type VehicleEnrichment } from "@dealfinder/domain";
+import {
+  classifyListing,
+  createVehicleSearchDraft,
+  type VehicleEnrichment
+} from "@dealfinder/domain";
 
 import { createTestDatabase, type TestDatabase } from "../testing/create-test-database.js";
 
@@ -76,6 +80,90 @@ describe("enrichment processing repository", () => {
     expect(repository.completeSuccess(claim, enrichment(), "2026-08-23T10:06:00.000Z", null)).toBe(false);
     expect(repository.getQueueItem(listingId)?.state).toBe("queued");
     expect(repository.getEnrichment(listingId)).toBeUndefined();
+  });
+
+  it("cancels classifier-excluded work and requeues only after re-inclusion", () => {
+    testDatabase = createTestDatabase();
+    const listingId = createListing(testDatabase);
+    const database = testDatabase.connection;
+    const repository = database.enrichmentProcessing;
+    repository.enqueue(listingId, AT);
+    database.listingClassifications.save(
+      listingId,
+      classifyListing({ title: "Bancos Volkswagen Golf 4" }),
+      AT
+    );
+
+    expect(repository.claimNext("2026-08-23T10:01:00.000Z")).toBeUndefined();
+    expect(repository.getQueueItem(listingId)).toMatchObject({
+      state: "cancelled",
+      lastErrorCode: "excluded_by_classifier"
+    });
+
+    database.listingClassifications.save(
+      listingId,
+      classifyListing({ title: "BMW 320d 2020" }),
+      "2026-08-23T10:02:00.000Z"
+    );
+    expect(repository.enqueue(listingId, "2026-08-23T10:02:00.000Z")).toMatchObject({
+      state: "queued"
+    });
+  });
+
+  it("does not store an in-flight completion after exclusion", () => {
+    testDatabase = createTestDatabase();
+    const listingId = createListing(testDatabase);
+    const database = testDatabase.connection;
+    const repository = database.enrichmentProcessing;
+    repository.enqueue(listingId, AT);
+    const claim = repository.claimNext(AT)!;
+    database.listingClassifications.save(
+      listingId,
+      classifyListing({ title: "Bancos Volkswagen Golf 4" }),
+      "2026-08-23T10:01:00.000Z"
+    );
+
+    expect(repository.completeSuccess(claim, enrichment(), "2026-08-23T10:02:00.000Z", "provider-1"))
+      .toBe(false);
+    expect(repository.getQueueItem(listingId)).toMatchObject({
+      state: "cancelled",
+      lastErrorCode: "excluded_by_classifier"
+    });
+    expect(repository.getEnrichment(listingId)).toBeUndefined();
+    expect(database.database.prepare(`
+      SELECT status, error_code FROM enrichment_requests WHERE id = ?
+    `).get(claim.requestId)).toEqual({
+      status: "upstream_failure",
+      error_code: "excluded_by_classifier"
+    });
+  });
+
+  it("does not retry a failed request after exclusion", () => {
+    testDatabase = createTestDatabase();
+    const listingId = createListing(testDatabase);
+    const database = testDatabase.connection;
+    const repository = database.enrichmentProcessing;
+    repository.enqueue(listingId, AT);
+    const claim = repository.claimNext(AT)!;
+    database.listingClassifications.save(
+      listingId,
+      classifyListing({ title: "Bancos Volkswagen Golf 4" }),
+      "2026-08-23T10:01:00.000Z"
+    );
+
+    repository.completeFailure(
+      claim,
+      "timeout",
+      "2026-08-23T10:02:00.000Z",
+      null,
+      "2026-08-23T10:17:00.000Z"
+    );
+
+    expect(repository.getQueueItem(listingId)).toMatchObject({
+      state: "cancelled",
+      lastErrorCode: "excluded_by_classifier"
+    });
+    expect(repository.claimNext("2026-08-23T10:18:00.000Z")).toBeUndefined();
   });
 });
 

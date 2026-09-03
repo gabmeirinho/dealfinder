@@ -77,13 +77,33 @@ export function normalizeVehicleFacts(input: NormalizeVehicleInput): NormalizedV
   const powerMatch = findPower(sources);
   if (powerMatch !== null) evidence.powerHp = [powerMatch.evidence];
   const makeModel = findMakeModelVariant(input.title);
-  if (makeModel.make !== null) evidence.make = [makeModel.evidence];
-  if (makeModel.model !== null) evidence.model = [makeModel.evidence];
-  if (makeModel.variant !== null) evidence.variant = [makeModel.evidence];
+  const structured = input.structuredFacts;
+  const structuredYear = structuredValue(structured?.year);
+  const structuredMileage = structuredValue(structured?.mileageKm);
+  const structuredMake = structuredValue(structured?.make);
+  const structuredModel = structuredValue(structured?.model);
+  const structuredVariant = structuredValue(structured?.variant);
+  const structuredFuel = structuredValue(structured?.fuel);
+  const structuredTransmission = structuredValue(structured?.transmission);
+  const structuredPower = structuredValue(structured?.powerHp);
+  if (structuredMileage !== null) evidence.mileageKm = [`Facebook structured: ${structuredMileage}`];
+  else if (mileageMatch !== null) evidence.mileageKm = [mileageMatch.evidence];
+  if (structuredYear !== null) evidence.year = [`Facebook structured: ${structuredYear}`];
+  else if (yearMatch !== null) evidence.year = [yearMatch.evidence];
+  if (structuredPower !== null) evidence.powerHp = [`Facebook structured: ${structuredPower}`];
+  else if (powerMatch !== null) evidence.powerHp = [powerMatch.evidence];
+  if (structuredMake !== null) evidence.make = [`Facebook structured: ${structuredMake}`];
+  else if (makeModel.make !== null) evidence.make = [makeModel.evidence];
+  if (structuredModel !== null) evidence.model = [`Facebook structured: ${structuredModel}`];
+  else if (makeModel.model !== null) evidence.model = [makeModel.evidence];
+  if (structuredVariant !== null) evidence.variant = [`Facebook structured: ${structuredVariant}`];
+  else if (makeModel.variant !== null) evidence.variant = [makeModel.evidence];
   const fuel = firstPattern(combined, FUEL_PATTERNS);
-  if (fuel !== null) evidence.fuel = [fuel.evidence];
+  if (structuredFuel !== null) evidence.fuel = [`Facebook structured: ${structuredFuel}`];
+  else if (fuel !== null) evidence.fuel = [fuel.evidence];
   const transmission = firstPattern(combined, TRANSMISSION_PATTERNS);
-  if (transmission !== null) evidence.transmission = [transmission.evidence];
+  if (structuredTransmission !== null) evidence.transmission = [`Facebook structured: ${structuredTransmission}`];
+  else if (transmission !== null) evidence.transmission = [transmission.evidence];
 
   const indicators = Object.fromEntries(
     Object.entries(INDICATOR_PATTERNS).map(([key, pattern]) => {
@@ -100,14 +120,14 @@ export function normalizeVehicleFacts(input: NormalizeVehicleInput): NormalizedV
   return {
     original,
     priceCents,
-    year: yearMatch?.value ?? null,
-    mileageKm: mileageMatch?.value ?? null,
-    make: makeModel.make,
-    model: makeModel.model,
-    variant: makeModel.variant,
-    fuel: fuel?.value ?? null,
-    transmission: transmission?.value ?? null,
-    powerHp: powerMatch?.value ?? null,
+    year: structuredYear ?? yearMatch?.value ?? null,
+    mileageKm: structuredMileage ?? mileageMatch?.value ?? null,
+    make: structuredMake ?? makeModel.make,
+    model: structuredModel ?? makeModel.model,
+    variant: structuredVariant ?? makeModel.variant,
+    fuel: structuredFuel ?? fuel?.value ?? null,
+    transmission: structuredTransmission ?? transmission?.value ?? null,
+    powerHp: structuredPower ?? powerMatch?.value ?? null,
     seller,
     indicators,
     evidence
@@ -142,14 +162,17 @@ function findYear(sources: readonly string[], referenceYear: number) {
 }
 
 function findMileage(sources: readonly string[]) {
-  const pattern = /\b(\d{1,3}(?:[ .]\d{3})+|\d+(?:[.,]\d+)?\s*(?:k|mil)?)\s*(km|kms|quil[oó]metros?|mi|miles?)\b/iu;
+  const pattern = /\b(\d{1,3}(?:[ .]\d{3})+|\d+(?:[.,]\d+)?\s*(?:k|mil)?)\s*(km|kms|quil[oó]metros?|mi|miles?)\b/iug;
   for (const source of sources) {
-    const match = source.match(pattern);
-    if (match?.[1] === undefined || match[2] === undefined) continue;
-    const amount = parseMagnitude(match[1]);
-    if (amount === null) continue;
-    const value = /^(?:mi|miles?)$/iu.test(match[2]) ? Math.round(amount * 1.609344) : Math.round(amount);
-    if (value >= 0 && value <= 3_000_000) return { value, evidence: source };
+    for (const match of source.matchAll(pattern)) {
+      if (match[1] === undefined || match[2] === undefined) continue;
+      const prefix = source.slice(0, match.index ?? 0);
+      if (/\b(?:ano|year|année|año|baujahr|jahr)\s*[:\-]?\s*$/iu.test(prefix)) continue;
+      const amount = parseMagnitude(match[1]);
+      if (amount === null) continue;
+      const value = /^(?:mi|miles?)$/iu.test(match[2]) ? Math.round(amount * 1.609344) : Math.round(amount);
+      if (value >= 0 && value <= 3_000_000) return { value, evidence: source };
+    }
   }
   return null;
 }
@@ -238,6 +261,7 @@ function validateInput(input: NormalizeVehicleInput): void {
   if (containsSellerIdentityOrContactData(originalTextFields)) {
     throw new Error("Seller identity or contact data is not accepted for normalization");
   }
+  validateStructuredFacts(input.structuredFacts);
   if (!Number.isInteger(input.referenceYear) || input.referenceYear < 1950 || input.referenceYear > 9999) {
     throw new Error("Reference year must be a four-digit year");
   }
@@ -252,6 +276,36 @@ function validateInput(input: NormalizeVehicleInput): void {
   ] as const) {
     if (value !== undefined && value !== null && (!Number.isSafeInteger(value) || value < 0)) {
       throw new Error(`${label} must be a non-negative integer`);
+    }
+  }
+}
+
+function structuredValue<T>(value: T | null | undefined): T | null {
+  return value === undefined || value === null ? null : value;
+}
+
+function validateStructuredFacts(facts: NormalizeVehicleInput["structuredFacts"]): void {
+  if (facts === undefined) return;
+  for (const [label, value, minimum, maximum] of [
+    ["Structured year", facts.year, 1950, 9999],
+    ["Structured mileage", facts.mileageKm, 0, 3_000_000],
+    ["Structured power", facts.powerHp, 20, 2_000]
+  ] as const) {
+    if (value !== undefined && value !== null &&
+        (!Number.isSafeInteger(value) || value < minimum || value > maximum)) {
+      throw new Error(`${label} is outside the supported range`);
+    }
+  }
+  for (const [label, value] of [
+    ["Structured make", facts.make],
+    ["Structured model", facts.model],
+    ["Structured variant", facts.variant]
+  ] as const) {
+    if (value !== undefined && value !== null && (value.trim() === "" || value.length > 200)) {
+      throw new Error(`${label} must contain 1-200 characters`);
+    }
+    if (value !== undefined && value !== null && containsSellerIdentityOrContactData([value])) {
+      throw new Error(`${label} contains seller identity or contact data`);
     }
   }
 }

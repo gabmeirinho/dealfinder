@@ -339,6 +339,11 @@ export class ListingsRepository {
       input.observedAt
     );
     const listingId = Number(insert.lastInsertRowid);
+    this.database.prepare(`
+      INSERT INTO listing_reviews (
+        listing_id, state, archived, rejection_reason, created_at, updated_at
+      ) VALUES (?, 'new', 0, NULL, ?, ?)
+    `).run(listingId, input.observedAt, input.observedAt);
     this.saveSearchSighting(listingId, input.searchId, input.observedAt);
     if (input.priceCents !== null) {
       this.database.prepare(`

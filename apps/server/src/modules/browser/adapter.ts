@@ -1,10 +1,12 @@
 export interface BrowserSession {
   readonly controlledTabs: 1;
   navigate(url: string): Promise<string>;
+  navigateListing?(url: string): Promise<string>;
   currentUrl(): string;
   close(): Promise<void>;
   onClosed(listener: () => void): () => void;
   snapshotMarketplaceResults?(): Promise<MarketplaceResultSnapshot>;
+  snapshotListingDetail?(): Promise<MarketplacePageEvidence>;
   scrollMarketplaceResults?(): Promise<void>;
   captureDiagnosticScreenshot?(): Promise<Uint8Array>;
 }

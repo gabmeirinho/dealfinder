@@ -20,3 +20,4 @@ export * from "./distance/index.js";
 export * from "./enrichment/index.js";
 export * from "./scoring/index.js";
 export * from "./duplicates/index.js";
+export * from "./classification/index.js";

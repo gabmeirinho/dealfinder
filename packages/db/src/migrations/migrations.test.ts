@@ -28,7 +28,7 @@ describe("database migrations", () => {
 
     expect(testDatabase.connection.migrationResult).toEqual({
       currentVersion: LATEST_SCHEMA_VERSION,
-      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
     });
     const migrations = testDatabase.connection.database
       .prepare("SELECT version, name FROM schema_migrations ORDER BY version")
@@ -45,7 +45,13 @@ describe("database migrations", () => {
       { version: 9, name: "create_geocoding_cache" },
       { version: 10, name: "create_enrichment_processing" },
       { version: 11, name: "create_deal_scores" },
-      { version: 12, name: "create_duplicate_groups" }
+      { version: 12, name: "create_duplicate_groups" },
+      { version: 13, name: "create_listing_review_workflow" },
+      { version: 14, name: "create_listing_classifications" },
+      { version: 15, name: "allow_cancelled_processing_queue" },
+      { version: 16, name: "capture_listing_descriptions" },
+      { version: 17, name: "listing_detail_descriptions" },
+      { version: 18, name: "listing_detail_facts" }
     ]);
   });
 
@@ -89,23 +95,17 @@ describe("database migrations", () => {
     const draft = createVehicleSearchDraft("Existing Golf search");
     draft.criteria.makeKeywords = { value: ["Volkswagen"], strength: "hard" };
     const search = database.searches.create(draft);
-    database.rawCandidates.saveObservation({
-      searchId: search.id,
+    insertLegacyRawObservation(database.database, search.id, {
+      sourceListingId: "100000000000001",
       observedAt: "2026-08-22T09:00:00.000Z",
-      candidate: {
-        source: "facebook",
-        sourceListingId: "100000000000001",
-        url: "https://www.facebook.com/marketplace/item/100000000000001/",
-        title: "Volkswagen Golf",
-        displayedPrice: "14 950 €",
-        location: "Lisboa",
-        thumbnailUrl: null,
-        rawCardFacts: ["Volkswagen Golf"]
-      }
+      title: "Volkswagen Golf",
+      displayedPrice: "14 950 €",
+      location: "Lisboa",
+      rawCardFacts: ["Volkswagen Golf"]
     });
 
     const result = runMigrations(database.database, allMigrations, () => new Date("2026-08-23"));
-    expect(result.appliedVersions).toEqual([7, 8, 9, 10, 11, 12]);
+    expect(result.appliedVersions).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
     const listing = database.database.prepare(`
       SELECT id, discovery_kind FROM listings WHERE source_listing_id = ?
     `).get("100000000000001") as unknown as { id: number; discovery_kind: string };
@@ -115,4 +115,90 @@ describe("database migrations", () => {
     `).all(listing.id)).toEqual([{ type: "new_listing", alertable: 0 }]);
     database.close();
   });
+
+  it("preserves existing queue rows when enabling classifier cancellation", () => {
+    const database = openDatabase({
+      filename: ":memory:",
+      migrations: allMigrations.slice(0, 14)
+    });
+    const draft = createVehicleSearchDraft("Existing queue listing");
+    draft.criteria.makeKeywords = { value: ["BMW"], strength: "hard" };
+    const search = database.searches.create(draft);
+    const raw = insertLegacyRawObservation(database.database, search.id, {
+      sourceListingId: "100000000000007",
+      observedAt: "2026-08-23T09:00:00.000Z",
+      title: "BMW 320d 2020",
+      displayedPrice: "24 900 €",
+      location: "Lisboa",
+      rawCardFacts: []
+    });
+    const listing = database.listings.ingestObservation({
+      rawCandidateId: raw.candidate.id,
+      searchId: search.id,
+      observedAt: "2026-08-23T09:00:00.000Z",
+      initialScan: false,
+      source: "facebook",
+      sourceListingId: raw.candidate.sourceListingId,
+      listingUrl: raw.candidate.listingUrl,
+      title: raw.observation.title,
+      displayedPrice: raw.observation.displayedPrice,
+      priceCents: 2_490_000
+    }).listing;
+    database.enrichmentProcessing.enqueue(listing.id, "2026-08-23T09:00:00.000Z");
+
+    expect(runMigrations(database.database, allMigrations, () => new Date("2026-08-23")))
+      .toEqual({ currentVersion: 18, appliedVersions: [15, 16, 17, 18] });
+    expect(database.enrichmentProcessing.getQueueItem(listing.id)).toMatchObject({ state: "queued" });
+
+    database.database.prepare(`
+      UPDATE processing_queue SET state = 'cancelled', last_error_code = 'excluded_by_classifier'
+      WHERE listing_id = ?
+    `).run(listing.id);
+    expect(database.enrichmentProcessing.getQueueItem(listing.id)).toMatchObject({ state: "cancelled" });
+    database.close();
+  });
 });
+
+function insertLegacyRawObservation(
+  database: DatabaseConnection["database"],
+  searchId: string,
+  input: {
+    sourceListingId: string;
+    observedAt: string;
+    title: string;
+    displayedPrice: string;
+    location: string;
+    rawCardFacts: readonly string[];
+  }
+): {
+  candidate: { id: number; sourceListingId: string; listingUrl: string };
+  observation: { title: string; displayedPrice: string };
+} {
+  const listingUrl = `https://www.facebook.com/marketplace/item/${input.sourceListingId}/`;
+  database.prepare(`
+    INSERT INTO raw_candidates (
+      source, source_listing_id, listing_url, first_seen_at, last_seen_at
+    ) VALUES ('facebook', ?, ?, ?, ?)
+  `).run(input.sourceListingId, listingUrl, input.observedAt, input.observedAt);
+  const candidate = database.prepare(`
+    SELECT id FROM raw_candidates WHERE source = 'facebook' AND source_listing_id = ?
+  `).get(input.sourceListingId) as unknown as { id: number };
+  database.prepare(`
+    INSERT INTO raw_candidate_observations (
+      candidate_id, search_id, observed_at, title, displayed_price,
+      location, thumbnail_url, raw_card_facts_json
+    ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
+  `).run(
+    candidate.id,
+    searchId,
+    input.observedAt,
+    input.title,
+    input.displayedPrice,
+    input.location,
+    JSON.stringify(input.rawCardFacts)
+  );
+  return {
+    candidate: { id: candidate.id, sourceListingId: input.sourceListingId, listingUrl },
+    observation: { title: input.title, displayedPrice: input.displayedPrice }
+  };
+}

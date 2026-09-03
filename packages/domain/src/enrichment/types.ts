@@ -6,6 +6,16 @@ export const ENRICHMENT_SCHEMA_VERSION = 1 as const;
 export interface EnrichmentInput {
   title: string;
   description: string | null;
+  sourceFacts?: {
+    mileageKm: {
+      structuredKm: number | null;
+      descriptionKm: number | null;
+      cardKm: number | null;
+      selectedKm: number | null;
+      source: "facebook_structured" | "description" | "card" | "none";
+      conflict: boolean;
+    };
+  };
   facts: {
     priceCents: number | null;
     year: number | null;

@@ -10,7 +10,7 @@ import {
 
 import { withTransaction } from "../transactions.js";
 
-export type ProcessingQueueState = "queued" | "processing" | "completed" | "failed";
+export type ProcessingQueueState = "queued" | "processing" | "completed" | "failed" | "cancelled";
 export type EnrichmentRequestFailure =
   | "invalid_response"
   | "timeout"
@@ -80,8 +80,12 @@ interface EnrichmentRow {
 export class EnrichmentProcessingRepository {
   public constructor(private readonly database: DatabaseSync) {}
 
-  public enqueue(listingId: number, sourceNormalizedAt: string): ProcessingQueueItem {
+  public enqueue(listingId: number, sourceNormalizedAt: string): ProcessingQueueItem | undefined {
     timestamp(sourceNormalizedAt, "Source normalized at");
+    if (this.isExcluded(listingId)) {
+      this.cancelExcluded(listingId);
+      return this.getQueueItem(listingId);
+    }
     this.database.prepare(`
       INSERT INTO processing_queue (
         listing_id, state, source_normalized_at, requested_at, available_at,
@@ -91,15 +95,19 @@ export class EnrichmentProcessingRepository {
         source_normalized_at = excluded.source_normalized_at,
         requested_at = CASE
           WHEN processing_queue.source_normalized_at = excluded.source_normalized_at
+            AND processing_queue.state <> 'cancelled'
             THEN processing_queue.requested_at
           ELSE excluded.requested_at
         END,
         available_at = CASE
           WHEN processing_queue.source_normalized_at = excluded.source_normalized_at
+            AND processing_queue.state <> 'cancelled'
             THEN processing_queue.available_at
           ELSE excluded.available_at
         END,
         state = CASE
+          WHEN processing_queue.source_normalized_at = excluded.source_normalized_at
+            AND processing_queue.state = 'cancelled' THEN 'queued'
           WHEN processing_queue.source_normalized_at = excluded.source_normalized_at
             THEN processing_queue.state
           WHEN processing_queue.state = 'processing' THEN 'processing'
@@ -107,11 +115,13 @@ export class EnrichmentProcessingRepository {
         END,
         completed_at = CASE
           WHEN processing_queue.source_normalized_at = excluded.source_normalized_at
+            AND processing_queue.state <> 'cancelled'
             THEN processing_queue.completed_at
           ELSE NULL
         END,
         last_error_code = CASE
           WHEN processing_queue.source_normalized_at = excluded.source_normalized_at
+            AND processing_queue.state <> 'cancelled'
             THEN processing_queue.last_error_code
           ELSE NULL
         END
@@ -119,13 +129,47 @@ export class EnrichmentProcessingRepository {
     return this.getQueueItem(listingId) as ProcessingQueueItem;
   }
 
+  public cancelExcluded(listingId: number): boolean {
+    const result = this.database.prepare(`
+      UPDATE processing_queue
+      SET state = 'cancelled', started_at = NULL, completed_at = NULL,
+          last_error_code = 'excluded_by_classifier'
+      WHERE listing_id = ? AND state IN ('queued', 'processing', 'failed')
+    `).run(listingId);
+    return Number(result.changes) === 1;
+  }
+
+  public cancelClaim(claim: ProcessingClaim, cancelledAt: string): void {
+    timestamp(cancelledAt, "Cancellation time");
+    withTransaction(this.database, () => {
+      this.finishRequest(
+        claim.requestId,
+        "upstream_failure",
+        cancelledAt,
+        null,
+        null,
+        "excluded_by_classifier"
+      );
+      this.cancelExcluded(claim.listingId);
+    });
+  }
+
   public recoverInterrupted(at: string): number {
     timestamp(at, "Recovery time");
     return withTransaction(this.database, () => {
       const result = this.database.prepare(`
         UPDATE processing_queue
-        SET state = 'queued', available_at = ?, started_at = NULL,
-            last_error_code = 'interrupted'
+        SET state = CASE WHEN EXISTS (
+              SELECT 1 FROM listing_classifications excluded
+              WHERE excluded.listing_id = processing_queue.listing_id
+                AND excluded.decision = 'exclude'
+            ) THEN 'cancelled' ELSE 'queued' END,
+            available_at = ?, started_at = NULL,
+            last_error_code = CASE WHEN EXISTS (
+              SELECT 1 FROM listing_classifications excluded
+              WHERE excluded.listing_id = processing_queue.listing_id
+                AND excluded.decision = 'exclude'
+            ) THEN 'excluded_by_classifier' ELSE 'interrupted' END
         WHERE state = 'processing'
       `).run(at);
       this.database.prepare(`
@@ -140,6 +184,7 @@ export class EnrichmentProcessingRepository {
   public claimNext(at: string): ProcessingClaim | undefined {
     timestamp(at, "Claim time");
     return withTransaction(this.database, () => {
+      this.cancelQueuedExcluded();
       const row = this.database.prepare(`
         UPDATE processing_queue
         SET state = 'processing', started_at = ?, attempts = attempts + 1,
@@ -151,6 +196,11 @@ export class EnrichmentProcessingRepository {
           WHERE control.state = 'active'
             AND queue.state = 'queued'
             AND queue.available_at <= ?
+            AND NOT EXISTS (
+              SELECT 1 FROM listing_classifications excluded
+              WHERE excluded.listing_id = queue.listing_id
+                AND excluded.decision = 'exclude'
+            )
           ORDER BY queue.requested_at ASC, queue.listing_id ASC
           LIMIT 1
         )
@@ -176,11 +226,25 @@ export class EnrichmentProcessingRepository {
     providerRequestId: string | null
   ): boolean {
     timestamp(completedAt, "Completion time");
-    const validated = validateVehicleEnrichment(enrichment);
     return withTransaction(this.database, () => {
+      if (this.isExcluded(claim.listingId)) {
+        this.finishRequest(
+          claim.requestId,
+          "upstream_failure",
+          completedAt,
+          null,
+          null,
+          "excluded_by_classifier"
+        );
+        this.cancelExcluded(claim.listingId);
+        return false;
+      }
+
+      const validated = validateVehicleEnrichment(enrichment);
       this.finishRequest(claim.requestId, "succeeded", completedAt, null, providerRequestId, null);
       const current = this.getQueueItem(claim.listingId);
-      const currentVersion = current?.sourceNormalizedAt === claim.sourceNormalizedAt;
+      const currentVersion = current?.state === "processing" &&
+        current.sourceNormalizedAt === claim.sourceNormalizedAt;
       if (currentVersion) {
         this.database.prepare(`
           INSERT INTO listing_enrichments (
@@ -202,17 +266,21 @@ export class EnrichmentProcessingRepository {
           completedAt
         );
       }
-      this.database.prepare(`
-        UPDATE processing_queue
-        SET state = ?, available_at = ?, started_at = NULL,
-            completed_at = ?, last_error_code = NULL
-        WHERE listing_id = ?
-      `).run(
-        currentVersion ? "completed" : "queued",
-        completedAt,
-        currentVersion ? completedAt : null,
-        claim.listingId
-      );
+      if (currentVersion) {
+        this.database.prepare(`
+          UPDATE processing_queue
+          SET state = 'completed', available_at = ?, started_at = NULL,
+              completed_at = ?, last_error_code = NULL
+          WHERE listing_id = ?
+        `).run(completedAt, completedAt, claim.listingId);
+      } else if (current?.sourceNormalizedAt !== claim.sourceNormalizedAt) {
+        this.database.prepare(`
+          UPDATE processing_queue
+          SET state = 'queued', available_at = ?, started_at = NULL,
+              completed_at = NULL, last_error_code = NULL
+          WHERE listing_id = ? AND state = 'processing'
+        `).run(completedAt, claim.listingId);
+      }
       return currentVersion;
     });
   }
@@ -229,6 +297,10 @@ export class EnrichmentProcessingRepository {
     withTransaction(this.database, () => {
       this.finishRequest(claim.requestId, failure, completedAt, httpStatus, null, failure);
       const current = this.getQueueItem(claim.listingId);
+      if (this.isExcluded(claim.listingId)) {
+        this.cancelExcluded(claim.listingId);
+        return;
+      }
       const changed = current?.sourceNormalizedAt !== claim.sourceNormalizedAt;
       const retry = changed || retryAt !== null;
       this.database.prepare(`
@@ -251,12 +323,16 @@ export class EnrichmentProcessingRepository {
       this.finishRequest(
         claim.requestId, "insufficient_credit", completedAt, httpStatus, null, "insufficient_credit"
       );
-      this.database.prepare(`
-        UPDATE processing_queue
-        SET state = 'queued', available_at = ?, started_at = NULL,
-            completed_at = NULL, last_error_code = 'insufficient_credit'
-        WHERE listing_id = ?
-      `).run(completedAt, claim.listingId);
+      if (this.isExcluded(claim.listingId)) {
+        this.cancelExcluded(claim.listingId);
+      } else {
+        this.database.prepare(`
+          UPDATE processing_queue
+          SET state = 'queued', available_at = ?, started_at = NULL,
+              completed_at = NULL, last_error_code = 'insufficient_credit'
+          WHERE listing_id = ?
+        `).run(completedAt, claim.listingId);
+      }
       const transitioned = this.database.prepare(`
         UPDATE processing_control
         SET state = 'credit_paused',
@@ -359,6 +435,28 @@ export class EnrichmentProcessingRepository {
       WHERE id = ? AND status = 'running'
     `).run(status, httpStatus, providerRequestId, errorCode, completedAt, requestId);
     if (Number(result.changes) !== 1) throw new Error("Enrichment request is not running");
+  }
+
+  private isExcluded(listingId: number): boolean {
+    return this.database.prepare(`
+      SELECT 1 AS excluded
+      FROM listing_classifications
+      WHERE listing_id = ? AND decision = 'exclude'
+    `).get(listingId) !== undefined;
+  }
+
+  private cancelQueuedExcluded(): void {
+    this.database.prepare(`
+      UPDATE processing_queue
+      SET state = 'cancelled', started_at = NULL, completed_at = NULL,
+          last_error_code = 'excluded_by_classifier'
+      WHERE state IN ('queued', 'failed')
+        AND EXISTS (
+          SELECT 1 FROM listing_classifications excluded
+          WHERE excluded.listing_id = processing_queue.listing_id
+            AND excluded.decision = 'exclude'
+        )
+    `).run();
   }
 }
 

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { openDatabase, type DatabaseConnection } from "@dealfinder/db";
-import { createVehicleSearchDraft } from "@dealfinder/domain";
+import { classifyListing, createVehicleSearchDraft } from "@dealfinder/domain";
 
 import {
   ListingIngestionService,
@@ -75,6 +75,31 @@ describe("corrections service", () => {
     expect(setup.database.normalizedVehicles.getRisk(listing.id)).toMatchObject({
       highRiskVerifyPrice: true,
       reasons: [expect.objectContaining({ code: "suspiciously_low_price" })]
+    });
+  });
+
+  it("does not requeue an excluded listing after a correction", () => {
+    const setup = createSetup();
+    database = setup.database;
+    const listing = ingest(setup, vehicle(1), "2026-08-23T09:00:00.000Z");
+    setup.database.listingClassifications.save(
+      listing.id,
+      classifyListing({ title: "Bancos Volkswagen Golf 4" }),
+      "2026-08-23T09:05:00.000Z"
+    );
+    setup.database.enrichmentProcessing.cancelExcluded(listing.id);
+    const service = new CorrectionsService(() => setup.database);
+
+    service.correct({
+      listingId: listing.id,
+      field: "mileageKm",
+      value: 118_000,
+      correctedAt: "2026-08-23T09:10:00.000Z"
+    });
+
+    expect(setup.database.enrichmentProcessing.getQueueItem(listing.id)).toMatchObject({
+      state: "cancelled",
+      lastErrorCode: "excluded_by_classifier"
     });
   });
 

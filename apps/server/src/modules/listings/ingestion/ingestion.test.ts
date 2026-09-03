@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { openDatabase, type DatabaseConnection } from "@dealfinder/db";
-import { createVehicleSearchDraft } from "@dealfinder/domain";
+import { classifyListing, createVehicleSearchDraft } from "@dealfinder/domain";
 
 import { ListingIngestionService, parseDisplayedEuroPrice } from "./service.js";
 
@@ -174,6 +174,132 @@ describe("listing ingestion", () => {
     expect(parseDisplayedEuroPrice("Grátis")).toBe(0);
     expect(parseDisplayedEuroPrice("Contactar vendedor")).toBeNull();
   });
+
+  it("classifies supplied non-vehicle patterns before enrichment", () => {
+    const setup = createSetup();
+    database = setup.database;
+    const service = new ListingIngestionService(() => setup.database);
+
+    service.ingestScan(scan(setup.searchId, "2026-08-23T09:00:00.000Z", false, [
+      candidate({ title: "Jantes Volkswagen Golf", sourceListingId: "100000000000002" })
+    ]));
+
+    const listing = setup.database.listings.getBySource("facebook", "100000000000002");
+    expect(setup.database.listingClassifications.get(listing?.id as number)).toMatchObject({
+      subject: "part_or_accessory",
+      decision: "exclude",
+      matchedPatterns: [{ category: "part", pattern: "jantes" }]
+    });
+    expect(setup.database.normalizedVehicles.getFacts(listing?.id as number)).toBeUndefined();
+    expect(setup.database.enrichmentProcessing.getQueueItem(listing?.id as number)).toBeUndefined();
+  });
+
+  it("persists a captured description and makes it available to enrichment", () => {
+    const setup = createSetup();
+    database = setup.database;
+    const service = new ListingIngestionService(() => setup.database);
+    const description = "Particular, caixa manual, histórico de manutenção completo.";
+
+    service.ingestScan(scan(setup.searchId, "2026-08-23T09:00:00.000Z", false, [
+      candidate({ description })
+    ]));
+
+    const listing = setup.database.listings.getBySource("facebook", candidate().sourceListingId);
+    const facts = setup.database.normalizedVehicles.getFacts(listing?.id as number);
+    const observation = setup.database.rawCandidates.listObservations(
+      setup.database.rawCandidates.get("facebook", candidate().sourceListingId)?.id as number
+    )[0];
+    expect(observation?.description).toBe(description);
+    expect(facts?.facts.original.description).toBe(description);
+    expect(facts?.facts.transmission).toBe("manual");
+    expect(facts?.facts.seller.type).toBe("private");
+  });
+
+  it("records parts-only cars as vehicles while excluding them from enrichment", () => {
+    const setup = createSetup();
+    database = setup.database;
+    const service = new ListingIngestionService(() => setup.database);
+
+    service.ingestScan(scan(setup.searchId, "2026-08-23T09:00:00.000Z", false, [
+      candidate({ title: "Volkswagen Golf só para peças", sourceListingId: "100000000000003" })
+    ]));
+
+    const listing = setup.database.listings.getBySource("facebook", "100000000000003");
+    expect(setup.database.listingClassifications.get(listing?.id as number)).toMatchObject({
+      subject: "whole_vehicle",
+      condition: "parts_only",
+      decision: "exclude"
+    });
+  });
+
+  it("does not enrich titles that fail hard search criteria", () => {
+    const setup = createSetup();
+    database = setup.database;
+    const service = new ListingIngestionService(() => setup.database);
+
+    service.ingestScan(scan(setup.searchId, "2026-08-23T09:00:00.000Z", false, [
+      candidate({ title: "Oeiras", sourceListingId: "100000000000004" })
+    ]));
+
+    const listing = setup.database.listings.getBySource("facebook", "100000000000004");
+    expect(setup.database.normalizedVehicles.getMatch(listing?.id as number, setup.searchId))
+      .toMatchObject({ eligible: false });
+    expect(setup.database.enrichmentProcessing.getQueueItem(listing?.id as number)).toBeUndefined();
+  });
+
+  it("backfills missing and stale classifications idempotently", () => {
+    const setup = createSetup();
+    database = setup.database;
+    const service = new ListingIngestionService(() => setup.database);
+    const excluded = createStoredListing(setup, "Bancos Volkswagen Golf 4", "100000000000005");
+    const kept = createStoredListing(setup, "Volkswagen Golf 1.6 TDI 2018", "100000000000006");
+
+    expect(service.backfillClassifications("2026-08-23T09:00:00.000Z")).toBe(2);
+    expect(setup.database.listingClassifications.get(excluded.id)).toMatchObject({
+      version: 2,
+      decision: "exclude",
+      subject: "part_or_accessory"
+    });
+    expect(setup.database.listingClassifications.get(kept.id)).toMatchObject({
+      version: 2,
+      decision: "continue"
+    });
+    expect(service.backfillClassifications("2026-08-23T10:00:00.000Z")).toBe(0);
+
+    const stale = classifyListing({ title: "Bancos Volkswagen Golf 4" });
+    setup.database.listingClassifications.save(
+      excluded.id,
+      { ...stale, version: 1 },
+      "2026-08-23T11:00:00.000Z"
+    );
+    expect(service.backfillClassifications("2026-08-23T12:00:00.000Z")).toBe(1);
+    expect(setup.database.listingClassifications.get(excluded.id)?.version).toBe(2);
+  });
+
+  it("cancels existing enrichment when a listing is reclassified as excluded", () => {
+    const setup = createSetup();
+    database = setup.database;
+    const service = new ListingIngestionService(() => setup.database);
+    service.ingestScan(scan(setup.searchId, "2026-08-23T09:00:00.000Z", false, [candidate()]));
+
+    const listing = setup.database.listings.getBySource("facebook", candidate().sourceListingId);
+    expect(setup.database.enrichmentProcessing.getQueueItem(listing?.id as number)?.state).toBe("queued");
+
+    service.ingestScan(scan(setup.searchId, "2026-08-23T10:00:00.000Z", false, [
+      candidate({ title: "Bancos Volkswagen Golf 4" })
+    ]));
+
+    expect(setup.database.listingClassifications.get(listing?.id as number)).toMatchObject({
+      decision: "exclude",
+      subject: "part_or_accessory"
+    });
+    expect(setup.database.enrichmentProcessing.getQueueItem(listing?.id as number)).toMatchObject({
+      state: "cancelled",
+      lastErrorCode: "excluded_by_classifier"
+    });
+    expect(setup.database.normalizedVehicles.getFacts(listing?.id as number)).toBeDefined();
+    expect(setup.database.enrichmentProcessing.claimNext("2026-08-23T11:00:00.000Z")).toBeUndefined();
+  });
 });
 
 function createSetup() {
@@ -196,6 +322,30 @@ function candidate(overrides: Partial<ReturnType<typeof baseCandidate>> = {}) {
   return { ...baseCandidate(), ...overrides };
 }
 
+function createStoredListing(
+  setup: ReturnType<typeof createSetup>,
+  title: string,
+  sourceListingId: string
+) {
+  const raw = setup.database.rawCandidates.saveObservation({
+    searchId: setup.searchId,
+    observedAt: "2026-08-23T09:00:00.000Z",
+    candidate: candidate({ title, sourceListingId })
+  });
+  return setup.database.listings.ingestObservation({
+    rawCandidateId: raw.candidate.id,
+    searchId: setup.searchId,
+    observedAt: "2026-08-23T09:00:00.000Z",
+    initialScan: false,
+    source: "facebook",
+    sourceListingId,
+    listingUrl: raw.candidate.listingUrl,
+    title: raw.observation.title,
+    displayedPrice: raw.observation.displayedPrice,
+    priceCents: 1_495_000
+  }).listing;
+}
+
 function baseCandidate() {
   return {
     source: "facebook" as const,
@@ -205,6 +355,7 @@ function baseCandidate() {
     displayedPrice: "14 950 €" as string | null,
     location: "Lisboa" as string | null,
     thumbnailUrl: null as string | null,
+    description: null as string | null,
     rawCardFacts: ["128 000 km", "Diesel"] as readonly string[]
   };
 }

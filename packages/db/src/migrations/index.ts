@@ -10,6 +10,12 @@ import { createGeocodingCacheMigration } from "./009-create-geocoding-cache.js";
 import { createEnrichmentProcessingMigration } from "./010-create-enrichment-processing.js";
 import { createDealScoresMigration } from "./011-create-deal-scores.js";
 import { createDuplicateGroupsMigration } from "./012-create-duplicate-groups.js";
+import { createListingReviewWorkflowMigration } from "./013-create-listing-review-workflow.js";
+import { createListingClassificationsMigration } from "./014-create-listing-classifications.js";
+import { allowCancelledProcessingQueueMigration } from "./015-allow-cancelled-processing-queue.js";
+import { captureListingDescriptionsMigration } from "./016-capture-listing-descriptions.js";
+import { listingDetailDescriptionsMigration } from "./017-listing-detail-descriptions.js";
+import { listingDetailFactsMigration } from "./018-listing-detail-facts.js";
 import type { Migration } from "./types.js";
 
 export const allMigrations: readonly Migration[] = [
@@ -24,7 +30,13 @@ export const allMigrations: readonly Migration[] = [
   createGeocodingCacheMigration,
   createEnrichmentProcessingMigration,
   createDealScoresMigration,
-  createDuplicateGroupsMigration
+  createDuplicateGroupsMigration,
+  createListingReviewWorkflowMigration,
+  createListingClassificationsMigration,
+  allowCancelledProcessingQueueMigration,
+  captureListingDescriptionsMigration,
+  listingDetailDescriptionsMigration,
+  listingDetailFactsMigration
 ];
 
 export const LATEST_SCHEMA_VERSION =

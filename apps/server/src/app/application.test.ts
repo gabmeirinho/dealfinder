@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { openDatabase } from "@dealfinder/db";
+import { allMigrations, openDatabase, type DatabaseConnection } from "@dealfinder/db";
 import { createVehicleSearchDraft } from "@dealfinder/domain";
 
 import { loadServerConfig } from "../config/index.js";
@@ -71,6 +71,50 @@ describe("application runtime", () => {
 
     expect(application.database?.scanRuns.hasSucceeded(search.id)).toBe(true);
   });
+
+  it("backfills legacy listing classifications before the runtime starts", async () => {
+    directory = mkdtempSync(join(tmpdir(), "dealfinder-runtime-"));
+    const config = loadServerConfig({ env: { DEALFINDER_DATA_DIR: directory } });
+    config.server.port = 0;
+    const seed = openDatabase({
+      filename: config.paths.sqlitePath,
+      migrations: allMigrations.slice(0, 13)
+    });
+    const draft = createVehicleSearchDraft("Golf");
+    draft.criteria.makeKeywords = { value: ["Volkswagen"], strength: "hard" };
+    const search = seed.searches.create(draft);
+    const raw = insertLegacyRawObservation(seed.database, search.id, {
+      sourceListingId: "100000000000005",
+      observedAt: "2026-08-23T09:00:00.000Z",
+      title: "Bancos Volkswagen Golf 4",
+      displayedPrice: "500 €",
+      location: "Lisboa",
+      rawCardFacts: []
+    });
+    const listing = seed.listings.ingestObservation({
+      rawCandidateId: raw.candidate.id,
+      searchId: search.id,
+      observedAt: "2026-08-23T09:00:00.000Z",
+      initialScan: false,
+      source: "facebook",
+      sourceListingId: raw.candidate.sourceListingId,
+      listingUrl: raw.candidate.listingUrl,
+      title: raw.observation.title,
+      displayedPrice: raw.observation.displayedPrice,
+      priceCents: 50_000
+    }).listing;
+    seed.close();
+
+    application = createApplicationRuntime({ config });
+    await application.start();
+
+    expect(application.database?.listingClassifications.get(listing.id)).toMatchObject({
+      version: 2,
+      subject: "part_or_accessory",
+      decision: "exclude"
+    });
+    expect(application.database?.listingClassifications.listNeedingVersion(2)).toEqual([]);
+  });
 });
 
 class EmptyResultsSession implements BrowserSession {
@@ -97,4 +141,45 @@ class EmptyResultsSession implements BrowserSession {
   }
 
   public async scrollMarketplaceResults(): Promise<void> {}
+}
+
+function insertLegacyRawObservation(
+  database: DatabaseConnection["database"],
+  searchId: string,
+  input: {
+    sourceListingId: string;
+    observedAt: string;
+    title: string;
+    displayedPrice: string;
+    location: string;
+    rawCardFacts: readonly string[];
+  }
+): { candidate: { id: number; sourceListingId: string; listingUrl: string }; observation: { title: string; displayedPrice: string } } {
+  const listingUrl = `https://www.facebook.com/marketplace/item/${input.sourceListingId}/`;
+  database.prepare(`
+    INSERT INTO raw_candidates (
+      source, source_listing_id, listing_url, first_seen_at, last_seen_at
+    ) VALUES ('facebook', ?, ?, ?, ?)
+  `).run(input.sourceListingId, listingUrl, input.observedAt, input.observedAt);
+  const candidate = database.prepare(`
+    SELECT id FROM raw_candidates WHERE source = 'facebook' AND source_listing_id = ?
+  `).get(input.sourceListingId) as unknown as { id: number };
+  database.prepare(`
+    INSERT INTO raw_candidate_observations (
+      candidate_id, search_id, observed_at, title, displayed_price,
+      location, thumbnail_url, raw_card_facts_json
+    ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
+  `).run(
+    candidate.id,
+    searchId,
+    input.observedAt,
+    input.title,
+    input.displayedPrice,
+    input.location,
+    JSON.stringify(input.rawCardFacts)
+  );
+  return {
+    candidate: { id: candidate.id, sourceListingId: input.sourceListingId, listingUrl },
+    observation: { title: input.title, displayedPrice: input.displayedPrice }
+  };
 }
