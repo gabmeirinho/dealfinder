@@ -76,6 +76,7 @@ function parseCard(
   const cardTexts = unique(leafTexts(card));
   const displayedPrice = fieldText(card, "price") ?? inferPrice(cardTexts);
   const title = fieldText(card, "title") ?? inferTitle(cardTexts, displayedPrice);
+  const description = fieldText(card, "description");
   const reasons: string[] = [];
 
   if (itemLink === undefined) reasons.push("A canonical Marketplace item URL is required");
@@ -83,6 +84,9 @@ function parseCard(
   if (title !== null && title.length > 1000) reasons.push("Listing title exceeds 1000 characters");
   if (displayedPrice !== null && displayedPrice.length > 200) {
     reasons.push("Displayed price exceeds 200 characters");
+  }
+  if (description !== null && description.length > 20_000) {
+    reasons.push("Listing description exceeds 20000 characters");
   }
   if (reasons.length > 0) return { cardIndex, sourceListingId, reasons };
 
@@ -109,7 +113,9 @@ function parseCard(
       reasons: ["A card fact exceeds 1000 characters"]
     };
   }
-  if (containsSellerIdentityOrContactData(rawCardFacts)) {
+  if (containsSellerIdentityOrContactData(
+    description === null ? rawCardFacts : [...rawCardFacts, description]
+  )) {
     return {
       cardIndex,
       sourceListingId,
@@ -127,6 +133,7 @@ function parseCard(
     sourceListingId: sourceListingId as string,
     url: itemLink?.parsed?.url as string,
     title: title as string,
+    ...(description === null ? {} : { description }),
     displayedPrice,
     location,
     thumbnailUrl,

@@ -25,6 +25,7 @@ import { handleDealScoresRequest } from "../modules/scoring/index.js";
 import { handleDuplicateGroupsRequest } from "../modules/duplicates/index.js";
 import { handleListingReviewRequest } from "../modules/listings/api/index.js";
 import type { ListingReviewService } from "../modules/workflow/index.js";
+import type { ListingDetailCaptureService } from "../modules/listings/detail-enrichment/index.js";
 
 export interface HttpServerOptions {
   database: () => DatabaseConnection;
@@ -34,6 +35,7 @@ export interface HttpServerOptions {
   facebookHealth?: () => FacebookHealthService;
   deepseek?: () => DeepSeekCreditController;
   listingWorkflow?: () => ListingReviewService;
+  listingDetailCapture?: () => ListingDetailCaptureService;
   staticDirectory?: string;
   now?: () => Date;
 }
@@ -121,6 +123,9 @@ export function createHttpServer(options: HttpServerOptions): Server {
         options.listingWorkflow !== undefined &&
         await handleListingReviewRequest(request, response, url, {
           workflow: options.listingWorkflow,
+          ...(options.listingDetailCapture === undefined
+            ? {}
+            : { listingDetailCapture: options.listingDetailCapture }),
           now
         })
       ) return;

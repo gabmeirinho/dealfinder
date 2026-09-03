@@ -68,7 +68,11 @@ export class DeepSeekEnrichmentService {
         stored.facts,
         database.corrections.listForListing(claim.listingId)
       );
-      const result = await this.#client.enrich(createEnrichmentInput(effectiveFacts));
+      const detailFacts = database.listingDetailFacts.get(claim.listingId);
+      const result = await this.#client.enrich(createEnrichmentInput(
+        effectiveFacts,
+        detailFacts === undefined ? undefined : { mileageKm: detailFacts.mileage }
+      ));
       const completedAt = this.#now().toISOString();
       const advanced = database.enrichmentProcessing.completeSuccess(
         claim, result.enrichment, completedAt, result.providerRequestId

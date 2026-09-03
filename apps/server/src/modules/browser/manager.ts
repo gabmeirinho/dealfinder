@@ -3,8 +3,12 @@ import type {
   BrowserStatus
 } from "@dealfinder/domain";
 
-import type { BrowserAdapter, BrowserSession } from "./adapter.js";
-import type { MarketplaceResultSnapshot } from "./adapter.js";
+import type {
+  BrowserAdapter,
+  BrowserSession,
+  MarketplacePageEvidence,
+  MarketplaceResultSnapshot
+} from "./adapter.js";
 
 export class BrowserCommandError extends Error {
   public constructor(
@@ -96,6 +100,17 @@ export class BrowserManager {
     return await this.requireOpenSession().navigate(url);
   }
 
+  public async navigateListing(url: string): Promise<string> {
+    const session = this.requireOpenSession();
+    if (session.navigateListing === undefined) {
+      throw new BrowserCommandError(
+        "BROWSER_DETAIL_UNSUPPORTED",
+        "The active browser adapter cannot open listing details"
+      );
+    }
+    return await session.navigateListing(url);
+  }
+
   public currentUrl(): string {
     return this.requireOpenSession().currentUrl();
   }
@@ -110,6 +125,17 @@ export class BrowserManager {
       );
     }
     return await snapshot.call(session);
+  }
+
+  public async snapshotListingDetail(): Promise<MarketplacePageEvidence> {
+    const session = this.requireOpenSession();
+    if (session.snapshotListingDetail === undefined) {
+      throw new BrowserCommandError(
+        "BROWSER_DETAIL_UNSUPPORTED",
+        "The active browser adapter cannot read listing details"
+      );
+    }
+    return await session.snapshotListingDetail.call(session);
   }
 
   public async scrollMarketplaceResults(): Promise<void> {

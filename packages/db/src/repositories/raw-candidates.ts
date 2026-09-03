@@ -1,5 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
+import { containsSellerIdentityOrContactData } from "@dealfinder/domain";
+
 import { withTransaction } from "../transactions.js";
 
 interface CandidateRow {
@@ -20,6 +22,7 @@ interface ObservationRow {
   displayed_price: string | null;
   location: string | null;
   thumbnail_url: string | null;
+  description: string | null;
   raw_card_facts_json: string;
 }
 
@@ -41,6 +44,7 @@ export interface RawCandidateObservation {
   displayedPrice: string | null;
   location: string | null;
   thumbnailUrl: string | null;
+  description: string | null;
   rawCardFacts: readonly string[];
 }
 
@@ -55,6 +59,7 @@ export interface SaveRawCandidateObservation {
     displayedPrice: string | null;
     location: string | null;
     thumbnailUrl: string | null;
+    description?: string | null;
     rawCardFacts: readonly string[];
   };
 }
@@ -96,8 +101,8 @@ export class RawCandidatesRepository {
       const insert = this.database.prepare(`
         INSERT INTO raw_candidate_observations (
           candidate_id, search_id, observed_at, title, displayed_price,
-          location, thumbnail_url, raw_card_facts_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          location, thumbnail_url, description, raw_card_facts_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(candidate_id, search_id, observed_at) DO NOTHING
       `).run(
         candidateRow.id,
@@ -107,12 +112,13 @@ export class RawCandidatesRepository {
         input.candidate.displayedPrice,
         input.candidate.location,
         input.candidate.thumbnailUrl,
+        input.candidate.description ?? null,
         JSON.stringify(input.candidate.rawCardFacts)
       );
 
       const observationRow = this.database.prepare(`
         SELECT id, candidate_id, search_id, observed_at, title, displayed_price,
-               location, thumbnail_url, raw_card_facts_json
+               location, thumbnail_url, description, raw_card_facts_json
         FROM raw_candidate_observations
         WHERE candidate_id = ? AND search_id = ? AND observed_at = ?
       `).get(candidateRow.id, input.searchId, input.observedAt) as unknown as ObservationRow;
@@ -137,7 +143,7 @@ export class RawCandidatesRepository {
   public listObservations(candidateId: number): RawCandidateObservation[] {
     return (this.database.prepare(`
       SELECT id, candidate_id, search_id, observed_at, title, displayed_price,
-             location, thumbnail_url, raw_card_facts_json
+             location, thumbnail_url, description, raw_card_facts_json
       FROM raw_candidate_observations
       WHERE candidate_id = ?
       ORDER BY observed_at ASC, id ASC
@@ -170,6 +176,7 @@ function mapObservation(row: ObservationRow): RawCandidateObservation {
     displayedPrice: row.displayed_price,
     location: row.location,
     thumbnailUrl: row.thumbnail_url,
+    description: row.description,
     rawCardFacts: facts
   };
 }
@@ -182,9 +189,16 @@ function validateInput(input: SaveRawCandidateObservation): void {
   optionalBounded(input.candidate.displayedPrice, "Displayed price", 200);
   optionalBounded(input.candidate.location, "Location", 500);
   optionalBounded(input.candidate.thumbnailUrl, "Thumbnail URL", 4096);
+  optionalBounded(input.candidate.description ?? null, "Description", 20_000);
   if (!Number.isFinite(Date.parse(input.observedAt))) throw new Error("Observed at must be an ISO timestamp");
   if (input.candidate.rawCardFacts.some((fact) => fact.trim() === "" || fact.length > 1000)) {
     throw new Error("Raw card facts must contain non-empty strings of at most 1000 characters");
+  }
+  const text = input.candidate.description === undefined || input.candidate.description === null
+    ? input.candidate.rawCardFacts
+    : [...input.candidate.rawCardFacts, input.candidate.description];
+  if (containsSellerIdentityOrContactData(text)) {
+    throw new Error("Seller identity or contact data is not accepted for raw observations");
   }
 }
 

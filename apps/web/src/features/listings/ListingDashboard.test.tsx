@@ -101,6 +101,7 @@ function mockClient(): ListingApiClient {
     setWorkflow: vi.fn(async (_id, state) => ({ ...detail, review: { ...detail.review, state } })),
     archive: vi.fn(async () => detail),
     addNote: vi.fn(async () => detail),
+    captureDescription: vi.fn(async () => detail),
     markSold: vi.fn(async () => detail),
     correct: vi.fn(async () => detail),
     decideRule: vi.fn(async () => undefined)

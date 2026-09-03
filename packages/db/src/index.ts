@@ -84,6 +84,16 @@ export type {
   ListingClassificationCandidate,
   StoredListingClassification
 } from "./repositories/listing-classifications.js";
+export { ListingDetailDescriptionsRepository } from "./repositories/listing-detail-descriptions.js";
+export type { ListingDetailDescription } from "./repositories/listing-detail-descriptions.js";
+export { ListingDetailFactsRepository } from "./repositories/listing-detail-facts.js";
+export type {
+  ListingDetailFactSnapshot,
+  ListingDetailFactSource,
+  ListingDetailFactValues,
+  ListingDetailMileageSources,
+  ListingDetailStructuredFacts
+} from "./repositories/listing-detail-facts.js";
 export type {
   SaveThumbnailMetadata,
   StoredDuplicateGroup,

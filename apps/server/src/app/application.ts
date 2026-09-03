@@ -35,6 +35,7 @@ import {
   ThumbnailStorage
 } from "../modules/duplicates/index.js";
 import { ListingReviewService } from "../modules/workflow/index.js";
+import { ListingDetailCaptureService } from "../modules/listings/detail-enrichment/index.js";
 
 export interface ApplicationOptions {
   config: ServerConfig;
@@ -148,6 +149,11 @@ export function createApplicationRuntime(
   });
   browser.onOpened(() => scheduler.wake());
   const listingWorkflow = new ListingReviewService(getDatabase, () => enrichment.wake());
+  const listingDetailCapture = new ListingDetailCaptureService({
+    database: getDatabase,
+    browser: () => browser,
+    processingWake: () => enrichment.wake()
+  });
   const server = createHttpServer({
     database: getDatabase,
     browser: () => browser,
@@ -156,6 +162,7 @@ export function createApplicationRuntime(
     facebookHealth: () => facebookHealth,
     deepseek: () => enrichment,
     listingWorkflow: () => listingWorkflow,
+    listingDetailCapture: () => listingDetailCapture,
     ...(options.staticDirectory === undefined
       ? {}
       : { staticDirectory: options.staticDirectory })

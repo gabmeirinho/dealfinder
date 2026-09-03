@@ -194,6 +194,27 @@ describe("listing ingestion", () => {
     expect(setup.database.enrichmentProcessing.getQueueItem(listing?.id as number)).toBeUndefined();
   });
 
+  it("persists a captured description and makes it available to enrichment", () => {
+    const setup = createSetup();
+    database = setup.database;
+    const service = new ListingIngestionService(() => setup.database);
+    const description = "Particular, caixa manual, histórico de manutenção completo.";
+
+    service.ingestScan(scan(setup.searchId, "2026-08-23T09:00:00.000Z", false, [
+      candidate({ description })
+    ]));
+
+    const listing = setup.database.listings.getBySource("facebook", candidate().sourceListingId);
+    const facts = setup.database.normalizedVehicles.getFacts(listing?.id as number);
+    const observation = setup.database.rawCandidates.listObservations(
+      setup.database.rawCandidates.get("facebook", candidate().sourceListingId)?.id as number
+    )[0];
+    expect(observation?.description).toBe(description);
+    expect(facts?.facts.original.description).toBe(description);
+    expect(facts?.facts.transmission).toBe("manual");
+    expect(facts?.facts.seller.type).toBe("private");
+  });
+
   it("records parts-only cars as vehicles while excluding them from enrichment", () => {
     const setup = createSetup();
     database = setup.database;
@@ -334,6 +355,7 @@ function baseCandidate() {
     displayedPrice: "14 950 €" as string | null,
     location: "Lisboa" as string | null,
     thumbnailUrl: null as string | null,
+    description: null as string | null,
     rawCardFacts: ["128 000 km", "Diesel"] as readonly string[]
   };
 }

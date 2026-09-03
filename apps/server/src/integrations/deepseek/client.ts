@@ -38,6 +38,7 @@ export interface DeepSeekClientOptions {
 
 const SYSTEM_PROMPT = `You enrich vehicle marketplace listings. Return JSON only.
 Never return seller identity, contact details, URLs, account data, diagnostics, credentials, or quoted evidence.
+When sourceFacts.mileageKm is present, use its selectedKm as the primary mileage. If conflict is true, retain the selected value but add the mileage uncertainty.
 Use exactly this object shape and no additional fields:
 {"schemaVersion":1,"vehicle":{"make":null,"model":null,"variant":null,"year":null,"mileageKm":null,"fuel":null,"transmission":null,"powerHp":null},"price":{"amountCents":null,"interpretation":"unknown"},"sellerType":null,"indicators":{"financing":false,"monthlyPayment":false,"deposit":false,"damaged":false,"imported":false},"uncertainties":[]}
 Allowed fuel values: petrol, diesel, hybrid, plug_in_hybrid, electric, lpg, other, or null.
@@ -140,6 +141,18 @@ function privacySafeInput(input: EnrichmentInput): EnrichmentInput {
   return {
     title: input.title,
     description: input.description,
+    ...(input.sourceFacts === undefined ? {} : {
+      sourceFacts: {
+        mileageKm: {
+          structuredKm: safeMileage(input.sourceFacts.mileageKm.structuredKm),
+          descriptionKm: safeMileage(input.sourceFacts.mileageKm.descriptionKm),
+          cardKm: safeMileage(input.sourceFacts.mileageKm.cardKm),
+          selectedKm: safeMileage(input.sourceFacts.mileageKm.selectedKm),
+          source: safeMileageSource(input.sourceFacts.mileageKm.source),
+          conflict: input.sourceFacts.mileageKm.conflict === true
+        }
+      }
+    }),
     facts: {
       priceCents: input.facts.priceCents,
       year: input.facts.year,
@@ -160,6 +173,16 @@ function privacySafeInput(input: EnrichmentInput): EnrichmentInput {
       }
     }
   };
+}
+
+function safeMileage(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 3_000_000
+    ? value
+    : null;
+}
+
+function safeMileageSource(value: unknown): "facebook_structured" | "description" | "card" | "none" {
+  return value === "facebook_structured" || value === "description" || value === "card" ? value : "none";
 }
 
 function statusError(status: number): DeepSeekError {

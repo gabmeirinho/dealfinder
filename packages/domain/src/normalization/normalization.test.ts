@@ -52,6 +52,45 @@ describe("vehicle normalization", () => {
     });
   });
 
+  it("does not treat a labelled year as mileage when the description has both", () => {
+    const facts = normalizeVehicleFacts({
+      title: "Volkswagen Golf 2009",
+      description: "Ano: 2009\nQuilómetros: 287.000 km\nCaixa manual",
+      displayedPrice: "4 300 €",
+      cardFacts: [],
+      referenceYear: 2026
+    });
+
+    expect(facts.year).toBe(2009);
+    expect(facts.mileageKm).toBe(287_000);
+    expect(facts.evidence.mileageKm).toEqual([
+      "Ano: 2009\nQuilómetros: 287.000 km\nCaixa manual"
+    ]);
+  });
+
+  it("prefers structured marketplace mileage and falls back to description", () => {
+    const structured = normalizeVehicleFacts({
+      title: "Volkswagen Golf 2009",
+      description: "Seller did not include mileage.",
+      displayedPrice: "4 300 €",
+      cardFacts: [],
+      referenceYear: 2026,
+      structuredFacts: { mileageKm: 297_000 }
+    });
+    expect(structured.mileageKm).toBe(297_000);
+    expect(structured.evidence.mileageKm).toEqual(["Facebook structured: 297000"]);
+
+    const fallback = normalizeVehicleFacts({
+      title: "Volkswagen Golf 2009",
+      description: "287.000 km",
+      displayedPrice: "4 300 €",
+      cardFacts: [],
+      referenceYear: 2026,
+      structuredFacts: { mileageKm: null }
+    });
+    expect(fallback.mileageKm).toBe(287_000);
+  });
+
   it("normalizes common EUR punctuation conservatively", () => {
     expect(normalizeEuroPrice("€12.345,67")).toBe(1_234_567);
     expect(normalizeEuroPrice("12,345.67 €")).toBe(1_234_567);

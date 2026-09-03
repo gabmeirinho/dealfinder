@@ -98,6 +98,7 @@ export class ListingReviewService {
       },
       normalizedFacts: stored?.facts ?? null,
       effectiveFacts: effectiveFacts ?? null,
+      detailFacts: database.listingDetailFacts.get(listingId) ?? null,
       corrections: corrections.map((correction) => ({
         ...correction,
         proposal: database.corrections.getProposalForCorrection(correction.id) ?? null

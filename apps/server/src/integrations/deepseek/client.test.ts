@@ -29,8 +29,9 @@ describe("DeepSeek client", () => {
     const serialized = JSON.stringify(request.body);
     expect(serialized).toContain("Return JSON only");
     const messages = request.body.messages as Array<{ role: string; content: string }>;
-    expect(messages.find(({ role }) => role === "user")?.content)
-      .not.toMatch(/cookie|account_id|diagnostic|seller_contact|profile_url/i);
+    const userContent = messages.find(({ role }) => role === "user")?.content ?? "";
+    expect(userContent).toContain('"description":"79 500 km, diesel"');
+    expect(userContent).not.toMatch(/cookie|account_id|diagnostic|seller_contact|profile_url/i);
   });
 
   it("rejects seller contact data before making a provider request", async () => {
@@ -41,6 +42,32 @@ describe("DeepSeek client", () => {
       ...input(), description: "Call +351 912 345 678"
     })).rejects.toMatchObject({ kind: "invalid_response" });
     expect(fake.requests).toEqual([]);
+  });
+
+  it("sends only the allowlisted mileage source metadata", async () => {
+    fake = await FakeDeepSeekServer.start((_request, response) => json(response, 200, completion(enrichment())));
+    const client = new DeepSeekClient({ apiKey: "secret", baseUrl: fake.url });
+
+    await client.enrich({
+      ...input(),
+      sourceFacts: {
+        mileageKm: {
+          structuredKm: 297_000,
+          descriptionKm: 287_000,
+          cardKm: null,
+          selectedKm: 297_000,
+          source: "facebook_structured",
+          conflict: true
+        }
+      },
+      sellerName: "must-not-leak"
+    } as EnrichmentInput);
+    const messages = fake.requests[0]?.body.messages as Array<{ role: string; content: string }>;
+    const userContent = messages.find(({ role }) => role === "user")?.content ?? "";
+    expect(userContent).toContain('"structuredKm":297000');
+    expect(userContent).toContain('"descriptionKm":287000');
+    expect(userContent).toContain('"conflict":true');
+    expect(userContent).not.toContain("sellerName");
   });
 
   it("fails closed for malformed or schema-invalid responses", async () => {

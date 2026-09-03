@@ -57,6 +57,18 @@ export interface ListingDetail extends ListingSummary {
   original: VehicleFacts["original"];
   normalizedFacts: VehicleFacts | null;
   effectiveFacts: VehicleFacts | null;
+  detailFacts?: {
+    structuredFacts: {
+      year: number | null; mileageKm: number | null; make: string | null; model: string | null;
+      variant: string | null; fuel: string | null; transmission: string | null; powerHp: number | null;
+      condition: string | null; listingCondition: string | null;
+    };
+    textFacts: Omit<VehicleFacts, "original" | "priceCents" | "seller" | "indicators"> & { mileageKm: number | null };
+    selectedFacts: Omit<VehicleFacts, "original" | "priceCents" | "seller" | "indicators"> & { mileageKm: number | null };
+    mileage: { structuredKm: number | null; descriptionKm: number | null; cardKm: number | null; selectedKm: number | null; source: string; conflict: boolean };
+    conflicts: string[];
+    capturedAt: string;
+  } | null;
   corrections: Array<{
     id: string; field: string; value: string | number | null; reason: string | null;
     proposal: { id: string; status: "pending" | "approved" | "rejected" } | null;
@@ -90,6 +102,7 @@ export interface ListingApiClient {
   setWorkflow(id: number, state: ListingReviewState, rejectionReason?: string | null): Promise<ListingDetail>;
   archive(id: number, archived: boolean): Promise<ListingDetail>;
   addNote(id: number, body: string): Promise<ListingDetail>;
+  captureDescription(id: number): Promise<ListingDetail>;
   markSold(id: number): Promise<ListingDetail>;
   correct(id: number, input: { field: string; value: string | number | null; reason?: string; proposeRule?: boolean }): Promise<ListingDetail>;
   decideRule(id: string, decision: "approve" | "reject"): Promise<void>;
@@ -120,6 +133,7 @@ export function createListingApiClient(request: typeof fetch = fetch): ListingAp
     addNote: (id, body) => listingMutation(id, "notes", {
       method: "POST", body: JSON.stringify({ body })
     }),
+    captureDescription: (id) => listingMutation(id, "description", { method: "POST" }),
     markSold: (id) => listingMutation(id, "sold", { method: "POST" }),
     correct: (id, input) => listingMutation(id, "corrections", {
       method: "POST", body: JSON.stringify(input)

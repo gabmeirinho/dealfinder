@@ -72,6 +72,46 @@ describe("Facebook Marketplace result parser", () => {
     });
   });
 
+  it("captures an optional card description and keeps it separate from card facts", () => {
+    const result = parseFacebookResultPage(`
+      <main data-dealfinder-results-contract="1">
+        <article data-dealfinder-card="marketplace-item">
+          <a href="/marketplace/item/100000000000011/">
+            <span data-dealfinder-field="price">12 500 €</span>
+            <span data-dealfinder-field="title">Volkswagen Golf 2018</span>
+            <span data-dealfinder-field="description">Particular, caixa manual, histórico completo.</span>
+            <span data-dealfinder-field="location">Lisboa</span>
+            <span data-dealfinder-field="fact">120 000 km</span>
+          </a>
+        </article>
+      </main>
+    `);
+
+    expect(result.candidates).toEqual([expect.objectContaining({
+      description: "Particular, caixa manual, histórico completo.",
+      rawCardFacts: ["120 000 km", "12 500 €", "Volkswagen Golf 2018", "Lisboa"]
+    })]);
+  });
+
+  it("rejects descriptions containing seller contact data", () => {
+    const result = parseFacebookResultPage(`
+      <main data-dealfinder-results-contract="1">
+        <article data-dealfinder-card="marketplace-item">
+          <a href="/marketplace/item/100000000000012/">
+            <span data-dealfinder-field="title">Volkswagen Golf 2018</span>
+            <span data-dealfinder-field="description">Contactar pelo WhatsApp +351 912 345 678.</span>
+          </a>
+        </article>
+      </main>
+    `);
+
+    expect(result.candidates).toEqual([]);
+    expect(result.rejectedCards[0]).toMatchObject({
+      sourceListingId: "100000000000012",
+      reasons: ["Seller identity or contact data is not accepted"]
+    });
+  });
+
   it("extracts cards using Facebook's np item route", () => {
     const result = parseFacebookResultPage(fixture("results-np-v1.html"));
 

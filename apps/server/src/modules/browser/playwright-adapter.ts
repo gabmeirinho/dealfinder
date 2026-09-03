@@ -5,6 +5,7 @@ import { chromium, errors, type BrowserContext, type Page } from "playwright";
 import type {
   BrowserAdapter,
   BrowserSession,
+  MarketplacePageEvidence,
   MarketplaceResultSnapshot
 } from "./adapter.js";
 
@@ -13,8 +14,13 @@ export const FACEBOOK_MARKETPLACE_ITEM_SELECTOR = [
   'a[href*="/marketplace/np/item/"]',
   'a[href*="/marketplace/shops/item/"]'
 ].join(", ");
+const FACEBOOK_RESULT_CARD_SELECTOR = [
+  '[data-testid="marketplace-item-card"]',
+  '[data-dealfinder-card="marketplace-item"]'
+].join(", ");
 
 const FACEBOOK_NAVIGATION_TIMEOUT_MS = 15_000;
+const FACEBOOK_DETAIL_READY_TIMEOUT_MS = 15_000;
 const FACEBOOK_RESULTS_TIMEOUT_MS = 15_000;
 const FACEBOOK_SNAPSHOT_RETRY_ATTEMPTS = 10;
 const FACEBOOK_SNAPSHOT_RETRY_DELAY_MS = 500;
@@ -81,6 +87,36 @@ class PlaywrightBrowserSession implements BrowserSession {
     return await navigateMarketplacePage(this.#controlledPage, url);
   }
 
+  public async navigateListing(url: string): Promise<string> {
+    try {
+      await this.#controlledPage.goto(url, {
+        waitUntil: "commit",
+        timeout: FACEBOOK_NAVIGATION_TIMEOUT_MS
+      });
+      await this.#controlledPage.waitForFunction(() => {
+        const browser = globalThis as unknown as {
+          document?: {
+            body?: { innerText?: string };
+            querySelector(selector: string): unknown;
+          };
+        };
+        const bodyText = browser.document?.body?.innerText ?? "";
+        return /(?:description|seller description|description du vendeur|descrição do vendedor|descripción del vendedor)/iu.test(bodyText) ||
+          (browser.document !== undefined && browser.document.querySelector(
+            '[data-testid*="description" i], [data-ad-preview="message"], [data-ad-comet-preview="message"]'
+          ) !== null);
+      }, { timeout: FACEBOOK_DETAIL_READY_TIMEOUT_MS }).catch(() => undefined);
+      await this.expandListingDescription();
+      await this.#controlledPage.waitForTimeout(500);
+      return this.#controlledPage.url();
+    } catch (error: unknown) {
+      throw new FacebookNavigationError(
+        "Facebook listing detail did not become ready",
+        { cause: error }
+      );
+    }
+  }
+
   public currentUrl(): string {
     return this.#controlledPage.url();
   }
@@ -96,7 +132,10 @@ class PlaywrightBrowserSession implements BrowserSession {
         const [cards, atEnd, title, bodyText, html, loadingCount] = await Promise.all([
           this.#controlledPage
             .locator(FACEBOOK_MARKETPLACE_ITEM_SELECTOR)
-            .evaluateAll((anchors) => anchors.map((anchor) => anchor.outerHTML)),
+            .evaluateAll((anchors, cardSelector) => anchors.map((anchor) => {
+              const card = anchor.closest(cardSelector);
+              return card?.outerHTML ?? anchor.outerHTML;
+            }), FACEBOOK_RESULT_CARD_SELECTOR),
           this.#controlledPage.evaluate(() => {
             const browser = globalThis as unknown as {
               scrollY: number;
@@ -133,6 +172,33 @@ class PlaywrightBrowserSession implements BrowserSession {
       }
     }
     throw new FacebookSnapshotError("Facebook Marketplace could not be read after navigation");
+  }
+
+  public async snapshotListingDetail(): Promise<MarketplacePageEvidence> {
+    const [title, bodyText, html] = await Promise.all([
+      this.#controlledPage.title(),
+      this.#controlledPage.locator("body").innerText().catch(() => ""),
+      this.#controlledPage.content()
+    ]);
+    return {
+      url: this.#controlledPage.url(),
+      title,
+      bodyText: bodyText.slice(0, 100_000),
+      html,
+      loading: false
+    };
+  }
+
+  private async expandListingDescription(): Promise<void> {
+    const expanders = this.#controlledPage
+      .locator('[role="button"]')
+      .filter({ hasText: /^(?:see more|ver mais|mostrar mais|voir plus|ver más)$/iu });
+    const count = Math.min(await expanders.count(), 3);
+    for (let index = 0; index < count; index += 1) {
+      const expander = expanders.nth(index);
+      if (!await expander.isVisible().catch(() => false)) continue;
+      await expander.click().catch(() => undefined);
+    }
   }
 
   public async scrollMarketplaceResults(): Promise<void> {

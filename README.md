@@ -92,6 +92,23 @@ scans retain at most 300 cards; later scans stop after 50 consecutive known
 listing IDs. Dashboard **Scan** requests enter this same durable queue, and the
 saved-search list reports persisted last/next scan times.
 
+Result cards persist a description when Facebook exposes one in the card
+markup. If a card has no description, the listing inspector offers **Capture
+full description**. That action opens only the selected Facebook listing in the
+visible controlled browser, captures the rendered seller description, stores
+the capture locally, refreshes normalized facts and match eligibility, and
+queues the listing for DeepSeek enrichment when eligible. It never crawls
+listing details automatically.
+
+During a selected-listing capture, the parser also reads a small allowlisted
+set of Facebook vehicle metadata. Structured mileage is selected when present;
+seller-description (or result-card) mileage is the fallback. Both values are
+retained, and a mileage conflict is surfaced in the listing detail for
+verification. Structured make,
+model, fuel, transmission, condition, and related vehicle fields are retained
+as metadata; the normalized vehicle fields use the structured values when
+available.
+
 Listing distance uses a bundled offline set of Portuguese locality centroids.
 Lookups make no network requests and therefore have no external rate limit;
 resolved and unknown localities are cached in SQLite. Values are labelled as

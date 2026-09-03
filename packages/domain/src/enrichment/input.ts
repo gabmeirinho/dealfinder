@@ -2,10 +2,14 @@ import type { NormalizedVehicleFacts } from "../normalization/index.js";
 import type { EnrichmentInput } from "./types.js";
 
 /** Produces the complete and deliberately narrow provider payload. */
-export function createEnrichmentInput(facts: NormalizedVehicleFacts): EnrichmentInput {
+export function createEnrichmentInput(
+  facts: NormalizedVehicleFacts,
+  sourceFacts?: EnrichmentInput["sourceFacts"]
+): EnrichmentInput {
   return {
     title: facts.original.title,
     description: facts.original.description,
+    ...(sourceFacts === undefined ? {} : { sourceFacts }),
     facts: {
       priceCents: facts.priceCents,
       year: facts.year,

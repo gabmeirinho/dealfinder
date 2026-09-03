@@ -6,6 +6,8 @@ import { openDatabase, type DatabaseConnection } from "@dealfinder/db";
 import { createVehicleSearchDraft } from "@dealfinder/domain";
 
 import { closeHttpServer, createHttpServer, listenHttpServer } from "../../../app/http.js";
+import type { BrowserManager } from "../../browser/index.js";
+import { ListingDetailCaptureService } from "../detail-enrichment/index.js";
 import { ListingIngestionService } from "../ingestion/index.js";
 import { ListingReviewService } from "../../workflow/index.js";
 
@@ -40,7 +42,26 @@ describe("listing review API", () => {
     });
     listingId = result.listings[0]?.id as number;
     const workflow = new ListingReviewService(() => database);
-    server = createHttpServer({ database: () => database, listingWorkflow: () => workflow });
+    const browser = {
+      navigateListing: async () => "https://www.facebook.com/marketplace/item/100000000000099/",
+      snapshotListingDetail: async () => ({
+        url: "https://www.facebook.com/marketplace/item/100000000000099/",
+        title: "Volkswagen Golf 2020",
+        bodyText: "Particular, caixa manual, revisão feita.",
+        html: `<section data-testid="marketplace-item-description">Particular, caixa manual, revisão feita.</section>`,
+        loading: false
+      })
+    } as unknown as BrowserManager;
+    const detailCapture = new ListingDetailCaptureService({
+      database: () => database,
+      browser: () => browser,
+      now: () => new Date("2026-08-24T10:05:00.000Z")
+    });
+    server = createHttpServer({
+      database: () => database,
+      listingWorkflow: () => workflow,
+      listingDetailCapture: () => detailCapture
+    });
     const address = await listenHttpServer(server, { host: "127.0.0.1", port: 0 });
     baseUrl = `http://127.0.0.1:${address.port}`;
   });
@@ -97,17 +118,27 @@ describe("listing review API", () => {
     expect(noSend.status).toBe(404);
   });
 
+  it("captures a full description from the controlled listing detail page", async () => {
+    const captured = await mutate(`/api/listings/${listingId}/description`, "POST", undefined);
+    expect(captured.listing.original.description).toBe("Particular, caixa manual, revisão feita.");
+    expect(captured.listing.effectiveFacts.original.description)
+      .toBe("Particular, caixa manual, revisão feita.");
+    expect(captured.listing.detailFacts).toMatchObject({
+      mileage: { descriptionKm: null, cardKm: 80_000, selectedKm: 80_000, source: "card", conflict: false }
+    });
+  });
+
   async function getJson<T>(path: string): Promise<T> {
     const response = await fetch(`${baseUrl}${path}`);
     expect(response.status).toBe(200);
     return response.json() as Promise<T>;
   }
 
-  async function mutate(path: string, method: string, body: unknown): Promise<any> {
+  async function mutate(path: string, method: string, body?: unknown): Promise<any> {
     const response = await fetch(`${baseUrl}${path}`, {
       method,
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body)
+      ...(body === undefined ? {} : { body: JSON.stringify(body) })
     });
     expect(response.status).toBe(200);
     return response.json();

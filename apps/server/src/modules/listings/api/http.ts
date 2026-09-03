@@ -4,6 +4,7 @@ import type { ListingReviewState } from "@dealfinder/db";
 import type { FactCorrection, NormalizedFactField } from "@dealfinder/domain";
 
 import type { ListingReviewService } from "../../workflow/index.js";
+import type { ListingDetailCaptureService } from "../detail-enrichment/index.js";
 
 const MAX_BODY_BYTES = 32_000;
 const STATES: readonly ListingReviewState[] = [
@@ -18,7 +19,11 @@ export async function handleListingReviewRequest(
   request: IncomingMessage,
   response: ServerResponse,
   url: URL,
-  options: { workflow: () => ListingReviewService; now?: () => Date }
+  options: {
+    workflow: () => ListingReviewService;
+    listingDetailCapture?: () => ListingDetailCaptureService;
+    now?: () => Date;
+  }
 ): Promise<boolean> {
   const segments = url.pathname.split("/").filter(Boolean);
   if (segments[0] !== "api") return false;
@@ -91,6 +96,13 @@ export async function handleListingReviewRequest(
       listing = workflow.addNote(listingId, requiredString(body.body, 4000), timestamp);
     } else if (action === "sold" && request.method === "POST") {
       listing = workflow.markSold(listingId, timestamp);
+    } else if (
+      action === "description" &&
+      request.method === "POST" &&
+      options.listingDetailCapture !== undefined
+    ) {
+      await options.listingDetailCapture().capture(listingId);
+      listing = workflow.detail(listingId);
     } else if (action === "corrections" && request.method === "POST") {
       const body = await readObject(request);
       const field = parseField(body.field);

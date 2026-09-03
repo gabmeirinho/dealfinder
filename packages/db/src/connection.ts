@@ -20,6 +20,8 @@ import { DealScoresRepository } from "./repositories/deal-scores.js";
 import { DuplicatesRepository } from "./repositories/duplicates.js";
 import { ListingReviewsRepository } from "./repositories/listing-reviews.js";
 import { ListingClassificationsRepository } from "./repositories/listing-classifications.js";
+import { ListingDetailDescriptionsRepository } from "./repositories/listing-detail-descriptions.js";
+import { ListingDetailFactsRepository } from "./repositories/listing-detail-facts.js";
 import { withTransaction } from "./transactions.js";
 
 export interface OpenDatabaseOptions {
@@ -47,6 +49,8 @@ export interface DatabaseConnection {
   readonly duplicates: DuplicatesRepository;
   readonly listingReviews: ListingReviewsRepository;
   readonly listingClassifications: ListingClassificationsRepository;
+  readonly listingDetailDescriptions: ListingDetailDescriptionsRepository;
+  readonly listingDetailFacts: ListingDetailFactsRepository;
   transaction<T>(operation: () => T): T;
   close(): void;
 }
@@ -95,6 +99,8 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseConnection {
     const duplicates = new DuplicatesRepository(database);
     const listingReviews = new ListingReviewsRepository(database);
     const listingClassifications = new ListingClassificationsRepository(database);
+    const listingDetailDescriptions = new ListingDetailDescriptionsRepository(database);
+    const listingDetailFacts = new ListingDetailFactsRepository(database);
     let closed = false;
 
     return {
@@ -116,6 +122,8 @@ export function openDatabase(options: OpenDatabaseOptions): DatabaseConnection {
       duplicates,
       listingReviews,
       listingClassifications,
+      listingDetailDescriptions,
+      listingDetailFacts,
       transaction: <T>(operation: () => T) => withTransaction(database, operation),
       close: () => {
         if (closed) return;

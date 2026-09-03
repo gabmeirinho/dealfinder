@@ -5,6 +5,8 @@ export interface FacebookRawCandidate {
   sourceListingId: string;
   url: string;
   title: string;
+  /** Optional text exposed on a result card; scans do not open detail pages. */
+  description?: string | null;
   displayedPrice: string | null;
   location: string | null;
   thumbnailUrl: string | null;

@@ -52,4 +52,35 @@ describe("vehicle enrichment contract", () => {
     ]);
     expect(JSON.stringify(input)).not.toMatch(/rating|inventory|evidence|displayedPrice|cardFacts|contact|cookie|url/i);
   });
+
+  it("keeps allowlisted mileage provenance available to the provider", () => {
+    const input = createEnrichmentInput(
+      normalizeVehicleFacts({
+        title: "Volkswagen Golf 2009",
+        description: "287.000 km",
+        displayedPrice: "4 300 €",
+        cardFacts: [],
+        referenceYear: 2026,
+        structuredFacts: { mileageKm: 297_000 }
+      }),
+      {
+        mileageKm: {
+          structuredKm: 297_000,
+          descriptionKm: 287_000,
+          cardKm: null,
+          selectedKm: 297_000,
+          source: "facebook_structured",
+          conflict: true
+        }
+      }
+    );
+    expect(input.sourceFacts?.mileageKm).toEqual({
+      structuredKm: 297_000,
+      descriptionKm: 287_000,
+      cardKm: null,
+      selectedKm: 297_000,
+      source: "facebook_structured",
+      conflict: true
+    });
+  });
 });
