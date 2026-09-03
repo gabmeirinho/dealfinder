@@ -127,13 +127,15 @@ export class ListingIngestionService {
           continue;
         }
 
+        const detailFacts = database.listingDetailFacts.get(ingested.listing.id);
         const normalized = applyReusableRules(normalizeVehicleFacts({
           title: candidate.title,
           description: candidate.description ?? null,
           displayedPrice: candidate.displayedPrice,
           cardFacts: candidate.rawCardFacts,
           referenceYear: new Date(input.observedAt).getUTCFullYear(),
-          ...(candidate.seller === undefined ? {} : { seller: candidate.seller })
+          ...(candidate.seller === undefined ? {} : { seller: candidate.seller }),
+          ...(detailFacts === undefined ? {} : { structuredFacts: detailFacts.structuredFacts })
         }), approvedRules);
         database.normalizedVehicles.saveFacts(
           ingested.listing.id,

@@ -82,7 +82,23 @@ describe("Facebook listing detail parser", () => {
     });
   });
 
-  it("fails closed when the description is missing or contains contact data", () => {
+  it("accepts structured vehicle metadata when Facebook has no labelled description", () => {
+    const detail = parseFacebookListingDetail(`
+      <script>
+        {"vehicle_make_display_name":"Volkswagen",
+         "vehicle_model_display_name":"Golf",
+         "vehicle_fuel_type":"DIESEL"}
+      </script>
+    `);
+
+    expect(detail).toMatchObject({
+      contractVersion: 1,
+      description: null,
+      structuredFacts: { make: "Volkswagen", model: "Golf", fuel: "diesel" }
+    });
+  });
+
+  it("fails closed when both description and structured metadata are missing", () => {
     expect(() => parseFacebookListingDetail("<main><p>Vehicle details</p></main>"))
       .toThrow(FacebookDetailContractError);
     expect(() => parseFacebookListingDetail(

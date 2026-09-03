@@ -54,6 +54,42 @@ describe("DeepSeek enrichment service", () => {
     expect(scored).toEqual([listingIds[0]]);
   });
 
+  it("keeps captured Facebook vehicle metadata over conflicting provider output", async () => {
+    const url = await startServer((_path, response) => {
+      const value = {
+        ...enrichment(),
+        vehicle: { ...enrichment().vehicle, fuel: "petrol", transmission: "manual" }
+      };
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(completion(value)));
+    });
+    const setup = setupService(url, ["100000000000001"]);
+    const listingId = setup.listingIds[0]!;
+    database!.listingDetailFacts.save(
+      listingId,
+      {
+        year: 2020, mileageKm: 79_500, make: "BMW", model: "320d", variant: null,
+        fuel: "diesel", transmission: "automatic", powerHp: 190,
+        condition: null, listingCondition: null
+      },
+      {
+        year: null, mileageKm: null, make: null, model: null, variant: null,
+        fuel: null, transmission: null, powerHp: null
+      },
+      {
+        year: 2020, mileageKm: 79_500, make: "BMW", model: "320d", variant: null,
+        fuel: "diesel", transmission: "automatic", powerHp: 190
+      },
+      AT
+    );
+
+    await expect(setup.service.processNext()).resolves.toBe("succeeded");
+    expect(database!.enrichmentProcessing.getEnrichment(listingId)?.enrichment.vehicle).toMatchObject({
+      fuel: "diesel",
+      transmission: "automatic"
+    });
+  });
+
   it("keeps Facebook collection active during a credit pause and requires a successful credit test", async () => {
     let postRequests = 0;
     let balanceAvailable = false;

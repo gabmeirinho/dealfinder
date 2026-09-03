@@ -36,19 +36,19 @@ export function parseFacebookListingDetail(html: string): FacebookListingDetail 
     .map(normalizeText)
     .filter((value) => value.length > 0);
   const description = descriptions.sort((left, right) => right.length - left.length)[0];
-  if (description === undefined) {
-    throw contractError("No labelled listing description was found");
+  const structuredFacts = findStructuredVehicleFacts(document);
+  if (description === undefined && structuredFacts === null) {
+    throw contractError("No labelled listing description or structured vehicle facts were found");
   }
-  if (description.length > 20_000) {
+  if (description !== undefined && description.length > 20_000) {
     throw contractError("Listing description exceeds 20000 characters");
   }
-  if (containsSellerIdentityOrContactData([description])) {
+  if (description !== undefined && containsSellerIdentityOrContactData([description])) {
     throw contractError("Seller identity or contact data is not accepted");
   }
-  const structuredFacts = findStructuredVehicleFacts(document);
   return {
     contractVersion: FACEBOOK_DETAIL_CONTRACT_VERSION,
-    description,
+    description: description ?? null,
     ...(structuredFacts === null ? {} : { structuredFacts })
   };
 }

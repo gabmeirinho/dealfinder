@@ -25,7 +25,7 @@ export interface ListingDetailCaptureServiceOptions {
 
 export interface ListingDetailCaptureResult {
   listingId: number;
-  description: string;
+  description: string | null;
   capturedAt: string;
   queuedForEnrichment: boolean;
 }
@@ -77,7 +77,9 @@ export class ListingDetailCaptureService {
         ...normalizeInput,
         ...(detail.structuredFacts === undefined ? {} : { structuredFacts: detail.structuredFacts })
       });
-      database.listingDetailDescriptions.save(listingId, detail.description, capturedAt);
+      if (detail.description !== null) {
+        database.listingDetailDescriptions.save(listingId, detail.description, capturedAt);
+      }
       database.listingDetailFacts.save(
         listingId,
         structuredFactValues(detail.structuredFacts),

@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import type { FuelType, TransmissionType } from "@dealfinder/domain";
 
 export interface ListingDetailStructuredFacts {
   year: number | null;
@@ -6,8 +7,8 @@ export interface ListingDetailStructuredFacts {
   make: string | null;
   model: string | null;
   variant: string | null;
-  fuel: string | null;
-  transmission: string | null;
+  fuel: FuelType | null;
+  transmission: TransmissionType | null;
   powerHp: number | null;
   condition: string | null;
   listingCondition: string | null;
@@ -19,8 +20,8 @@ export interface ListingDetailFactValues {
   make: string | null;
   model: string | null;
   variant: string | null;
-  fuel: string | null;
-  transmission: string | null;
+  fuel: FuelType | null;
+  transmission: TransmissionType | null;
   powerHp: number | null;
   /** Odometer found in the result card, kept separate from detail description text. */
   cardMileageKm?: number | null;

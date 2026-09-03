@@ -187,4 +187,79 @@ describe("listing detail capture", () => {
       conflicts: ["mileageKm"]
     });
   });
+
+  it("captures structured Facebook metadata when the seller description is unavailable", async () => {
+    database = openDatabase({ filename: ":memory:" });
+    const draft = createVehicleSearchDraft("Golf");
+    draft.criteria.makeKeywords = { value: ["Volkswagen"], strength: "hard" };
+    const search = database.searches.create(draft);
+    new ListingIngestionService(() => database as DatabaseConnection).ingestScan({
+      searchId: search.id,
+      observedAt: "2026-09-03T09:00:00.000Z",
+      initialScan: false,
+      completeSnapshot: true,
+      candidates: [{
+        source: "facebook",
+        sourceListingId: "100000000000023",
+        url: "https://www.facebook.com/marketplace/item/100000000000023/",
+        title: "Volkswagen Golf 2020",
+        description: null,
+        displayedPrice: "18 500 €",
+        location: "Lisboa",
+        thumbnailUrl: null,
+        rawCardFacts: []
+      }]
+    });
+    const listing = database.listings.getBySource("facebook", "100000000000023");
+    const browser = {
+      navigateListing: vi.fn(async () => "https://www.facebook.com/marketplace/item/100000000000023/"),
+      snapshotListingDetail: vi.fn(async () => ({
+        url: "https://www.facebook.com/marketplace/item/100000000000023/",
+        title: "Volkswagen Golf 2020",
+        bodyText: "",
+        html: `<script>{"vehicle_make_display_name":"Volkswagen","vehicle_model_display_name":"Golf","vehicle_fuel_type":"DIESEL","vehicle_transmission_type":"MANUAL"}</script>`,
+        loading: false
+      }))
+    } as unknown as BrowserManager;
+    const service = new ListingDetailCaptureService({
+      database: () => database as DatabaseConnection,
+      browser: () => browser,
+      now: () => new Date("2026-09-03T09:05:00.000Z")
+    });
+
+    await expect(service.capture(listing?.id as number)).resolves.toMatchObject({
+      listingId: listing?.id,
+      description: null,
+      queuedForEnrichment: true
+    });
+    expect(database.listingDetailDescriptions.get(listing?.id as number)).toBeUndefined();
+    expect(database.listingDetailFacts.get(listing?.id as number)).toMatchObject({
+      structuredFacts: { make: "Volkswagen", model: "Golf", fuel: "diesel", transmission: "manual" },
+      selectedFacts: { make: "Volkswagen", model: "Golf", fuel: "diesel", transmission: "manual" }
+    });
+    expect(database.normalizedVehicles.getFacts(listing?.id as number)?.facts).toMatchObject({
+      make: "Volkswagen", model: "Golf", fuel: "diesel", transmission: "manual"
+    });
+
+    new ListingIngestionService(() => database as DatabaseConnection).ingestScan({
+      searchId: search.id,
+      observedAt: "2026-09-03T09:10:00.000Z",
+      initialScan: false,
+      completeSnapshot: false,
+      candidates: [{
+        source: "facebook",
+        sourceListingId: "100000000000023",
+        url: "https://www.facebook.com/marketplace/item/100000000000023/",
+        title: "Volkswagen Golf 2020",
+        description: null,
+        displayedPrice: "18 500 €",
+        location: "Lisboa",
+        thumbnailUrl: null,
+        rawCardFacts: []
+      }]
+    });
+    expect(database.normalizedVehicles.getFacts(listing?.id as number)?.facts).toMatchObject({
+      make: "Volkswagen", model: "Golf", fuel: "diesel", transmission: "manual"
+    });
+  });
 });

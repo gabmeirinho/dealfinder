@@ -9,7 +9,7 @@ export interface FacebookListingStructuredFacts extends StructuredVehicleFacts {
 
 export interface FacebookListingDetail {
   contractVersion: typeof FACEBOOK_DETAIL_CONTRACT_VERSION;
-  description: string;
+  description: string | null;
   structuredFacts?: FacebookListingStructuredFacts;
 }
 
