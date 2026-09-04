@@ -22,6 +22,9 @@ interface HtmlNode {
 }
 
 const DESCRIPTION_TEST_ID = /(?:^|[-_:])description(?:$|[-_:])/iu;
+const DESCRIPTION_LABEL = /\bdescription\b|descri[cç][aã]o|descripci[oó]n/iu;
+const LISTING_DATA_KEY = /(?:marketplace|listing|vehicle|product|item|ad)/iu;
+const LISTING_PAYLOAD_KEY = /(?:marketplace[_-]?listing|listing[_-]?(?:details?|data)|vehicle[_-]?(?:details?|data)|marketplaceListing)/iu;
 
 /** Parse description content from stable Facebook labels and localized section headings. */
 export function parseFacebookListingDetail(html: string): FacebookListingDetail {
@@ -62,7 +65,7 @@ function isDescriptionNode(node: HtmlNode): boolean {
     (testId !== null && DESCRIPTION_TEST_ID.test(testId)) ||
     preview === "message" ||
     attribute(node, "data-ad-comet-preview") === "message" ||
-    (ariaLabel !== null && DESCRIPTION_TEST_ID.test(ariaLabel));
+    (ariaLabel !== null && DESCRIPTION_LABEL.test(ariaLabel));
 }
 
 function isDescriptionMeta(node: HtmlNode): boolean {
@@ -73,16 +76,16 @@ function isDescriptionMeta(node: HtmlNode): boolean {
 
 function findStructuredDescriptions(document: HtmlNode): string[] {
   return findAll(document, (node) => node.tagName === "script")
-    .filter((node) => /application\/ld\+json/iu.test(attribute(node, "type") ?? ""))
     .flatMap((node) => {
-      const source = textContent(node).trim();
+      const source = decodeStructuredSource(textContent(node).trim());
       if (source === "") return [];
-      try {
-        const value: unknown = JSON.parse(source);
-        return collectDescriptionProperties(value);
-      } catch {
-        return [];
-      }
+      const value = parseEmbeddedJson(source);
+      const isJsonLd = /application\/ld\+json/iu.test(attribute(node, "type") ?? "");
+      const parsed = value === undefined ? [] : collectDescriptionProperties(value, isJsonLd);
+      const raw = LISTING_PAYLOAD_KEY.test(source)
+        ? [propertyString(source, "description")].filter((description): description is string => description !== null)
+        : [];
+      return [...parsed, ...raw];
     });
 }
 
@@ -95,29 +98,47 @@ function findStructuredDescriptions(document: HtmlNode): string[] {
 function findStructuredVehicleFacts(document: HtmlNode): FacebookListingStructuredFacts | null {
   const source = findAll(document, (node) => node.tagName === "script")
     .map(textContent)
-    .join("\n")
-    .replaceAll('\\"', '"');
-  if (source.trim() === "") return null;
+    .join("\n");
+  const normalizedSource = decodeStructuredSource(source);
+  if (normalizedSource.trim() === "") return null;
 
-  const odometer = propertyObject(source, "vehicle_odometer_data");
-  const odometerUnit = propertyString(odometer, "unit");
-  const odometerValue = propertyNumber(odometer, "value");
+  const odometer = propertyObjectAny(normalizedSource, [
+    "vehicle_odometer_data", "odometer_data", "odometerData"
+  ]);
+  const odometerUnit = propertyStringAny(odometer, ["unit", "units"]);
+  const odometerValue = propertyNumberAny(odometer, ["value", "amount"]);
   const mileageKm = odometerValue === null || odometerUnit === null
     ? null
     : normalizeOdometer(odometerValue, odometerUnit);
-  // `custom_title` is reused by unrelated recommended listings on the same
-  // page, so the title/year remains sourced from the selected listing itself.
-  const year = null;
-  const make = propertyString(source, "vehicle_make_display_name");
-  const modelDisplay = propertyString(source, "vehicle_model_display_name");
-  const trim = propertyString(source, "vehicle_trim_display_name");
+  const year = normalizeYear(propertyNumberAny(normalizedSource, [
+    "vehicle_year", "vehicleYear", "model_year", "modelYear"
+  ]));
+  const make = propertyStringAny(normalizedSource, [
+    "vehicle_make_display_name", "vehicle_make", "vehicleMake", "make"
+  ]);
+  const modelDisplay = propertyStringAny(normalizedSource, [
+    "vehicle_model_display_name", "vehicle_model", "vehicleModel", "model"
+  ]);
+  const trim = propertyStringAny(normalizedSource, [
+    "vehicle_trim_display_name", "vehicle_trim", "vehicleTrim", "trim"
+  ]);
   const modelParts = splitModelDisplay(modelDisplay, trim);
-  const fuel = normalizeFuel(propertyString(source, "vehicle_fuel_type"));
-  const transmission = normalizeTransmission(propertyString(source, "vehicle_transmission_type"));
-  const specifications = propertyObject(source, "vehicle_specifications");
-  const powerHp = normalizePower(propertyNumber(specifications, "horse_power"));
-  const condition = propertyString(source, "vehicle_condition");
-  const listingCondition = null;
+  const fuel = normalizeFuel(propertyStringAny(normalizedSource, [
+    "vehicle_fuel_type", "vehicle_fuel", "fuel_type", "fuelType", "fuel"
+  ]));
+  const transmission = normalizeTransmission(propertyStringAny(normalizedSource, [
+    "vehicle_transmission_type", "vehicle_transmission", "transmission_type", "transmissionType", "transmission"
+  ]));
+  const specifications = propertyObjectAny(normalizedSource, [
+    "vehicle_specifications", "vehicleSpecifications", "specifications"
+  ]);
+  const powerHp = normalizePower(propertyNumberAny(specifications, [
+    "horse_power", "horsepower", "power_hp", "powerHp"
+  ]));
+  const condition = propertyStringAny(normalizedSource, ["vehicle_condition", "condition"]);
+  const listingCondition = propertyStringAny(normalizedSource, [
+    "listing_condition", "listingCondition"
+  ]);
 
   if (mileageKm === null && year === null && make === null && modelParts.model === null &&
       modelParts.variant === null && fuel === null && transmission === null && powerHp === null &&
@@ -138,22 +159,30 @@ function findStructuredVehicleFacts(document: HtmlNode): FacebookListingStructur
   };
 }
 
+function propertyObjectAny(source: string | null, names: readonly string[]): string | null {
+  for (const name of names) {
+    const value = propertyObject(source, name);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
 function propertyObject(source: string | null, name: string): string | null {
   if (source === null) return null;
   for (const start of propertyStarts(source, name)) {
     if (source[start] !== "{") continue;
     let depth = 0;
-    let quoted = false;
+    let quote: '"' | "'" | null = null;
     let escaped = false;
     for (let index = start; index < source.length; index += 1) {
       const character = source[index];
-      if (quoted) {
+      if (quote !== null) {
         if (escaped) escaped = false;
         else if (character === "\\") escaped = true;
-        else if (character === '"') quoted = false;
+        else if (character === quote) quote = null;
         continue;
       }
-      if (character === '"') quoted = true;
+      if (character === '"' || character === "'") quote = character;
       else if (character === "{") depth += 1;
       else if (character === "}" && --depth === 0) return source.slice(start + 1, index);
     }
@@ -161,24 +190,52 @@ function propertyObject(source: string | null, name: string): string | null {
   return null;
 }
 
+function propertyStringAny(source: string | null, names: readonly string[]): string | null {
+  if (source === null || source.trim() === "") return null;
+
+  for (const name of names) {
+    const value = propertyString(source, name);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
 function propertyString(source: string | null, name: string): string | null {
   const value = propertyRaw(source, name);
-  return value !== null && value !== "null" ? decodeStructuredString(value) : null;
+  if (value !== null && value !== "null") return decodeStructuredString(value);
+  const nested = propertyObject(source, name);
+  return nested === null
+    ? null
+    : propertyStringAny(nested, ["value", "name", "display_name", "displayName", "label"]);
+}
+
+function propertyNumberAny(source: string | null, names: readonly string[]): number | null {
+  if (source === null || source.trim() === "") return null;
+
+  for (const name of names) {
+    const value = propertyNumber(source, name);
+    if (value !== null) return value;
+  }
+  return null;
 }
 
 function propertyNumber(source: string | null, name: string): number | null {
   const value = propertyRaw(source, name);
-  if (value === null || value === "null") return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+  if (value !== null && value !== "null") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  const nested = propertyObject(source, name);
+  return nested === null ? null : propertyNumberAny(nested, ["value", "amount", "number"]);
 }
 
 function propertyRaw(source: string | null, name: string): string | null {
   if (source === null) return null;
   for (const start of propertyStarts(source, name)) {
     const remainder = source.slice(start).trimStart();
-    if (remainder.startsWith('"')) {
-      const match = remainder.match(/^"((?:\\.|[^"\\])*)"/u);
+    if (remainder.startsWith('"') || remainder.startsWith("'")) {
+      const quote = remainder[0];
+      const match = remainder.match(new RegExp(`^${quote}((?:\\\\.|[^${quote}\\\\])*)${quote}`, "u"));
       if (match?.[1] !== undefined) return match[1];
       continue;
     }
@@ -190,7 +247,8 @@ function propertyRaw(source: string | null, name: string): string | null {
 
 function propertyStarts(source: string, name: string): number[] {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  const pattern = new RegExp(`(?:^|[,{])\\s*"${escaped}"\\s*:\\s*`, "giu");
+  const key = `(?:"${escaped}"|'${escaped}'|${escaped})`;
+  const pattern = new RegExp(`(?:^|[\\[{,])\\s*${key}\\s*:\\s*`, "giu");
   const starts: number[] = [];
   for (const match of source.matchAll(pattern)) {
     starts.push((match.index ?? 0) + match[0].length);
@@ -205,7 +263,35 @@ function decodeStructuredString(value: string): string {
     .replaceAll("\\r", "\r")
     .replaceAll("\\t", "\t")
     .replaceAll('\\"', '"')
+    .replaceAll("\\'", "'")
     .trim();
+}
+
+function decodeStructuredSource(value: string): string {
+  return value
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#34;", '"')
+    .replaceAll("&#x22;", '"')
+    .replaceAll('\\"', '"');
+}
+
+function parseEmbeddedJson(source: string): unknown | undefined {
+  for (const candidate of [
+    source,
+    source.replace(/^\s*(?:for\s*\(;;\);|while\s*\(1\);)/u, "").trim()
+  ]) {
+    try {
+      return JSON.parse(candidate) as unknown;
+    } catch {
+      // Facebook also embeds executable Relay data; string extraction handles that form.
+    }
+  }
+  return undefined;
+}
+
+function normalizeYear(value: number | null): number | null {
+  if (value === null || !Number.isSafeInteger(value) || value < 1950 || value > 2_100) return null;
+  return value;
 }
 
 function normalizeOdometer(value: number, unit: string): number | null {
@@ -256,12 +342,19 @@ function cleanStructuredText(value: string | null): string | null {
   return clean === "" ? null : clean.slice(0, 200);
 }
 
-function collectDescriptionProperties(value: unknown): string[] {
-  if (Array.isArray(value)) return value.flatMap(collectDescriptionProperties);
+function collectDescriptionProperties(value: unknown, listingContext = false): string[] {
+  if (Array.isArray(value)) return value.flatMap((item) => collectDescriptionProperties(item, listingContext));
   if (typeof value !== "object" || value === null) return [];
   const record = value as Record<string, unknown>;
-  const own = typeof record.description === "string" ? [record.description] : [];
-  return [...own, ...Object.values(record).flatMap(collectDescriptionProperties)];
+  const type = typeof record["@type"] === "string" ? record["@type"] : "";
+  const currentContext = listingContext || LISTING_DATA_KEY.test(Object.keys(record).join(" ")) ||
+    /product|vehicle|listing|ad/iu.test(type);
+  const own = currentContext && typeof record.description === "string" ? [record.description] : [];
+  return [
+    ...own,
+    ...Object.entries(record).flatMap(([key, child]) =>
+      collectDescriptionProperties(child, currentContext || LISTING_DATA_KEY.test(key)))
+  ];
 }
 
 function findDescriptionsAfterHeadings(node: HtmlNode): string[] {
@@ -281,7 +374,7 @@ function findDescriptionsAfterHeadings(node: HtmlNode): string[] {
 
 function isDescriptionHeading(node: HtmlNode): boolean {
   const value = normalizeText(textContent(node));
-  return /^(?:description|seller description|description du vendeur|descrição|descrição do vendedor)$/iu.test(value);
+  return /^(?:description|seller(?:'s|’s)? description|description du vendeur|descri[cç][aã]o(?: do vendedor)?|descripci[oó]n(?: del vendedor)?)$/iu.test(value);
 }
 
 function isDescriptionHeadingContainer(node: HtmlNode): boolean {

@@ -94,6 +94,11 @@ export type {
   ListingDetailMileageSources,
   ListingDetailStructuredFacts
 } from "./repositories/listing-detail-facts.js";
+export { ListingDetailCaptureAttemptsRepository } from "./repositories/listing-detail-capture-attempts.js";
+export type {
+  ListingDetailCaptureAttempt,
+  ListingDetailCaptureAttemptState
+} from "./repositories/listing-detail-capture-attempts.js";
 export type {
   SaveThumbnailMetadata,
   StoredDuplicateGroup,

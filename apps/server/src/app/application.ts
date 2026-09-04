@@ -124,10 +124,34 @@ export function createApplicationRuntime(
     database: getDatabase,
     service: enrichmentService
   });
+  const listingDetailCapture = new ListingDetailCaptureService({
+    database: getDatabase,
+    browser: () => browser,
+    processingWake: () => enrichment.wake()
+  });
   const scanner = new FacebookScanner({
     database: getDatabase,
     browser: () => browser,
     failures: facebookFailures,
+    afterScan: async (searchId) => {
+      try {
+        const result = await listingDetailCapture.captureEligible(searchId);
+        if (result.attempted > 0) {
+          logger.info("Facebook detail capture batch completed", {
+            searchId,
+            attempted: result.attempted,
+            succeeded: result.succeeded,
+            failed: result.failed,
+            blocked: result.blocked
+          });
+        }
+      } catch (error: unknown) {
+        logger.warn("Facebook detail capture batch unavailable", {
+          searchId,
+          errorType: error instanceof Error ? error.name : "unknown"
+        });
+      }
+    },
     processingWake: () => {
       enrichment.wake();
       duplicates.wake();
@@ -149,11 +173,6 @@ export function createApplicationRuntime(
   });
   browser.onOpened(() => scheduler.wake());
   const listingWorkflow = new ListingReviewService(getDatabase, () => enrichment.wake());
-  const listingDetailCapture = new ListingDetailCaptureService({
-    database: getDatabase,
-    browser: () => browser,
-    processingWake: () => enrichment.wake()
-  });
   const server = createHttpServer({
     database: getDatabase,
     browser: () => browser,

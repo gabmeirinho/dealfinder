@@ -107,7 +107,7 @@ class PlaywrightBrowserSession implements BrowserSession {
           (browser.document !== undefined && browser.document.querySelector(
             '[data-testid*="description" i], [data-ad-preview="message"], [data-ad-comet-preview="message"]'
           ) !== null) ||
-          /vehicle_(?:fuel_type|make_display_name|model_display_name|trim_display_name|odometer_data|transmission_type|specifications)/iu.test(pageHtml);
+          /(?:vehicle_(?:fuel_type|make_display_name|model_display_name|trim_display_name|odometer_data|transmission_type|specifications)|(?:fuel_type|fuelType|vehicleYear|vehicleMake|vehicleModel|vehicleTrim|odometerData|transmissionType))/iu.test(pageHtml);
       }, { timeout: FACEBOOK_DETAIL_READY_TIMEOUT_MS }).catch(() => undefined);
       await this.expandListingDescription();
       await this.#controlledPage.waitForTimeout(500);

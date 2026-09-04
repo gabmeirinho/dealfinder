@@ -128,9 +128,10 @@ export class ListingIngestionService {
         }
 
         const detailFacts = database.listingDetailFacts.get(ingested.listing.id);
+        const detailDescription = database.listingDetailDescriptions.get(ingested.listing.id);
         const normalized = applyReusableRules(normalizeVehicleFacts({
           title: candidate.title,
-          description: candidate.description ?? null,
+          description: detailDescription?.description ?? candidate.description ?? null,
           displayedPrice: candidate.displayedPrice,
           cardFacts: candidate.rawCardFacts,
           referenceYear: new Date(input.observedAt).getUTCFullYear(),

@@ -66,6 +66,26 @@ describe("listing detail capture", () => {
     expect(browser.navigateListing).toHaveBeenCalledWith(
       "https://www.facebook.com/marketplace/item/100000000000020/"
     );
+
+    ingestion.ingestScan({
+      searchId: search.id,
+      observedAt: "2026-09-03T09:10:00.000Z",
+      initialScan: false,
+      completeSnapshot: false,
+      candidates: [{
+        source: "facebook",
+        sourceListingId: "100000000000020",
+        url: "https://www.facebook.com/marketplace/item/100000000000020/",
+        title: "Volkswagen Golf 2018",
+        description: null,
+        displayedPrice: "12 500 €",
+        location: "Lisboa",
+        thumbnailUrl: null,
+        rawCardFacts: []
+      }]
+    });
+    expect(database.normalizedVehicles.getFacts(listing?.id as number)?.facts.original.description)
+      .toBe("Particular, caixa manual, revisão feita.");
   });
 
   it("fails closed when Facebook redirects to another listing", async () => {
@@ -262,4 +282,81 @@ describe("listing detail capture", () => {
       make: "Volkswagen", model: "Golf", fuel: "diesel", transmission: "manual"
     });
   });
+
+  it("captures only a bounded batch and skips recently captured listings", async () => {
+    database = openDatabase({ filename: ":memory:" });
+    const draft = createVehicleSearchDraft("Golf batch");
+    draft.criteria.makeKeywords = { value: ["Volkswagen"], strength: "hard" };
+    const search = database.searches.create(draft);
+    const ingestion = new ListingIngestionService(() => database as DatabaseConnection);
+    ingestion.ingestScan({
+      searchId: search.id,
+      observedAt: "2026-09-03T09:00:00.000Z",
+      initialScan: false,
+      completeSnapshot: true,
+      candidates: [
+        batchCandidate("100000000000024"),
+        batchCandidate("100000000000025"),
+        batchCandidate("100000000000026")
+      ]
+    });
+    let currentUrl = "";
+    const browser = {
+      navigateListing: vi.fn(async (url: string) => {
+        currentUrl = url;
+        return url;
+      }),
+      snapshotListingDetail: vi.fn(async () => ({
+        url: currentUrl,
+        title: "Volkswagen Golf",
+        bodyText: "",
+        html: `<script>{"vehicle_make_display_name":"Volkswagen","vehicle_model_display_name":"Golf","vehicle_fuel_type":"DIESEL"}</script>`,
+        loading: false
+      }))
+    } as unknown as BrowserManager;
+    const service = new ListingDetailCaptureService({
+      database: () => database as DatabaseConnection,
+      browser: () => browser,
+      now: () => new Date("2026-09-03T10:00:00.000Z")
+    });
+
+    await expect(service.captureEligible(search.id, 2)).resolves.toEqual({
+      searchId: search.id,
+      attempted: 2,
+      succeeded: 2,
+      failed: 0,
+      blocked: false
+    });
+    expect(browser.navigateListing).toHaveBeenCalledTimes(2);
+
+    await expect(service.captureEligible(search.id, 2)).resolves.toEqual({
+      searchId: search.id,
+      attempted: 1,
+      succeeded: 1,
+      failed: 0,
+      blocked: false
+    });
+    await expect(service.captureEligible(search.id, 2)).resolves.toEqual({
+      searchId: search.id,
+      attempted: 0,
+      succeeded: 0,
+      failed: 0,
+      blocked: false
+    });
+    expect(browser.navigateListing).toHaveBeenCalledTimes(3);
+  });
 });
+
+function batchCandidate(sourceListingId: string) {
+  return {
+    source: "facebook" as const,
+    sourceListingId,
+    url: `https://www.facebook.com/marketplace/item/${sourceListingId}/`,
+    title: "Volkswagen Golf 2020",
+    description: null,
+    displayedPrice: "12 500 €",
+    location: "Lisboa",
+    thumbnailUrl: null,
+    rawCardFacts: []
+  };
+}
