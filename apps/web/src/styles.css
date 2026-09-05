@@ -268,7 +268,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .inbox-register div { display: grid; gap: 5px; min-width: 66px; }
 .inbox-register dt { color: var(--muted); font-family: var(--utility); font-size: 0.66rem; text-transform: uppercase; }
 .inbox-register dd { margin: 0; color: var(--navy); font-family: var(--utility); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
-.listing-filters { display: grid; grid-template-columns: minmax(220px, 1fr) 190px auto auto auto; gap: 12px; align-items: end; padding: 18px 0; border-top: 3px solid var(--navy); border-bottom: 1px solid var(--line); }
+.listing-filters { display: grid; grid-template-columns: minmax(160px, 1fr) 140px auto auto 180px auto; gap: 12px; align-items: end; padding: 18px 0; border-top: 3px solid var(--navy); border-bottom: 1px solid var(--line); }
 .listing-filters label:not(.review-check), .workflow-control label, .correction-form label:not(.review-check), .notes-section label { display: grid; gap: 7px; color: var(--navy); font-size: 0.72rem; font-weight: 700; }
 .listing-filters input[type="text"], .listing-filters input:not([type]), .listing-filters select, .workflow-control input, .correction-form input, .correction-form select, .notes-section textarea { width: 100%; min-height: 43px; padding: 9px 11px; color: var(--ink); background: #fff; border: 1px solid #9db1ab; border-radius: 0; }
 .review-check { display: inline-flex; gap: 8px; align-items: center; min-height: 43px; color: var(--navy); cursor: pointer; font-size: 0.73rem; font-weight: 700; }
@@ -474,3 +474,24 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* Independent market evidence and search preferences share the existing ledger. */
+.listing-row-main > .listing-assessment-summary { color: var(--ink); font-size: 0.78rem; line-height: 1.6; }
+.assessment-detail { overflow-wrap: anywhere; }
+.assessment-search { display: grid; gap: 8px; margin-bottom: 24px; }
+.assessment-section { padding: 24px 0; border-top: 1px solid var(--line); }
+.assessment-section:last-child { padding-bottom: 0; }
+.assessment-section h4 { margin: 0 0 12px; font-size: 1.05rem; }
+.assessment-verdict { margin: 0 0 12px; color: var(--navy); font-size: 1.2rem; font-weight: 700; line-height: 1.4; }
+.assessment-verdict.is-uncertain { color: #8b501b; }
+.assessment-explanation { margin: 12px 0; color: var(--ink); font-size: 0.875rem; line-height: 1.65; }
+.assessment-facts, .assessment-pending { display: grid; gap: 14px; margin: 18px 0; }
+.assessment-facts dt, .assessment-pending dt { color: var(--muted); font-size: 0.8rem; }
+.assessment-facts dd, .assessment-pending dd { margin: 4px 0 0; color: var(--navy); font-size: 1rem; font-variant-numeric: tabular-nums; }
+.preference-evidence { margin: 16px 0; padding: 0; list-style: none; }
+.preference-evidence li { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 0.875rem; }
+.preference-evidence small { grid-column: 1 / -1; color: var(--muted); font-size: 0.8rem; }
+.confidence-evidence summary { padding: 10px 0; color: var(--coast); cursor: pointer; font-weight: 700; font-size: 0.875rem; }
+.confidence-evidence ul { padding-left: 20px; font-size: 0.875rem; line-height: 1.65; }
+
+.assessment-search select { width: 100%; min-height: 44px; padding: 9px 11px; color: var(--ink); background: #fff; border: 1px solid #9db1ab; border-radius: 0; font: inherit; }

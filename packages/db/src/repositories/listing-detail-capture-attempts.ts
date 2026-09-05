@@ -100,7 +100,7 @@ export class ListingDetailCaptureAttemptsRepository {
         AND (attempts.state IS NULL OR attempts.state <> 'processing')
       ORDER BY CASE WHEN matches.match_status = 'needs_information' THEN 0 ELSE 1 END,
       COALESCE((
-        SELECT MAX(scores.total_score)
+        SELECT MAX(scores.personal_fit_percent)
         FROM listing_deal_scores scores
         WHERE scores.listing_id = listings.id AND scores.search_id = links.search_id
       ), -1) DESC,

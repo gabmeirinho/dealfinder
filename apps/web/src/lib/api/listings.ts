@@ -1,3 +1,6 @@
+import type { DealScore } from "@dealfinder/domain";
+export type { DealScore } from "@dealfinder/domain";
+
 export type ListingReviewState =
   | "new" | "shortlisted" | "contacted" | "viewing_arranged" | "rejected" | "bought";
 
@@ -20,6 +23,7 @@ export interface ListingSummary {
   facts: VehicleFacts | null;
   risk: RiskAssessment | null;
   score: DealScore | null;
+  assessmentSearchName?: string | null;
   matchStatus?: "matches" | "excluded" | "needs_information";
   processing: { state: string; lastErrorCode: string | null } | null;
 }
@@ -37,16 +41,6 @@ export interface VehicleFacts {
   powerHp: number | null;
   seller: { type: string | null; rating: number | null; ratingCount: number | null; inventorySize: number | null };
   indicators: Record<string, boolean>;
-}
-
-export interface DealScore {
-  total: number;
-  confidence: "low" | "medium" | "high";
-  marketDataLabel: string;
-  medianPriceCents: number | null;
-  comparableCount: number;
-  discountPercent: number | null;
-  components: Array<{ key: string; points: number; explanation: string }>;
 }
 
 export interface RiskAssessment {
@@ -90,7 +84,10 @@ export interface ListingDetail extends ListingSummary {
   suggestedQuestions: string[];
 }
 
+export type ListingSort = "recent" | "market_value" | "personal_fit" | "confidence";
+
 export interface ListingFilters {
+  sort?: ListingSort;
   state?: ListingReviewState;
   risk?: boolean;
   archived?: boolean;
@@ -117,6 +114,7 @@ export function createListingApiClient(request: typeof fetch = fetch): ListingAp
   return {
     list: async (filters = {}) => {
       const query = new URLSearchParams();
+      if (filters.sort !== undefined) query.set("sort", filters.sort);
       if (filters.state !== undefined) query.set("state", filters.state);
       if (filters.risk === true) query.set("risk", "true");
       if (filters.archived === true) query.set("archived", "true");

@@ -34,32 +34,22 @@ export class DealScoringService {
   public recomputeAll(scoredAt: string): StoredDealScore[] {
     validateTimestamp(scoredAt, "Scored at");
     const database = this.#database();
-    if (database.enrichmentProcessing.getControl().downstreamPaused) return [];
     const resolved = database.enrichmentProcessing.listEnrichments()
       .map((stored) => resolveListing(database, stored))
       .filter((listing): listing is ResolvedListing => listing !== undefined);
-    const history: ComparableListingInput[] = resolved.map((listing) => ({
-      listingId: listing.listingId,
-      enrichment: listing.enrichment,
-      highRiskVerifyPrice: listing.risk.highRiskVerifyPrice
-    }));
+    const history = marketplaceHistory(database, resolved);
     return resolved.flatMap((subject) => this.recomputeSubject(subject, history, scoredAt));
   }
 
   public recomputeListing(listingId: number, scoredAt: string): StoredDealScore[] {
     validateTimestamp(scoredAt, "Scored at");
     const database = this.#database();
-    if (database.enrichmentProcessing.getControl().downstreamPaused) return [];
     const resolved = database.enrichmentProcessing.listEnrichments()
       .map((stored) => resolveListing(database, stored))
       .filter((listing): listing is ResolvedListing => listing !== undefined);
     const subject = resolved.find((listing) => listing.listingId === listingId);
     if (subject === undefined) return [];
-    const history = resolved.map((listing) => ({
-      listingId: listing.listingId,
-      enrichment: listing.enrichment,
-      highRiskVerifyPrice: listing.risk.highRiskVerifyPrice
-    }));
+    const history = marketplaceHistory(database, resolved);
     return this.recomputeSubject(subject, history, scoredAt);
   }
 
@@ -96,12 +86,30 @@ export class DealScoringService {
         distance: database.geocoding.getDistance(subject.listingId, searchId)?.distance ?? null,
         lastSeenAt: listing.lastSeenAt,
         evaluatedAt: scoredAt,
-        marketplaceHistory: history
+        marketplaceHistory: history,
+        factConflicts: database.listingDetailFacts.get(subject.listingId)?.conflicts ?? []
       });
       scores.push(database.dealScores.save(subject.listingId, searchId, calculation, scoredAt));
     }
     return scores;
   }
+}
+
+function marketplaceHistory(database: DatabaseConnection, resolved: readonly ResolvedListing[]): ComparableListingInput[] {
+  const groups = new Map<number, string>();
+  for (const group of database.duplicates.listGroups()) {
+    for (const member of group.members) groups.set(member.listingId, group.id);
+  }
+  return resolved.flatMap((subject) => {
+    const listing = database.listings.get(subject.listingId);
+    if (listing === undefined || listing.availability !== "active") return [];
+    const group = groups.get(subject.listingId);
+    return [{
+      listingId: subject.listingId, enrichment: subject.enrichment,
+      highRiskVerifyPrice: subject.risk.highRiskVerifyPrice, lastSeenAt: listing.lastSeenAt,
+      ...(group === undefined ? {} : { duplicateGroupId: group })
+    }];
+  });
 }
 
 function resolveListing(

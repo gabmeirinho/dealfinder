@@ -10,6 +10,7 @@ import type { BrowserManager } from "../../browser/index.js";
 import { ListingDetailCaptureService } from "../detail-enrichment/index.js";
 import { ListingIngestionService } from "../ingestion/index.js";
 import { ListingReviewService } from "../../workflow/index.js";
+import { DealScoringService } from "../../scoring/service.js";
 
 describe("listing review API", () => {
   let database: DatabaseConnection;
@@ -69,6 +70,29 @@ describe("listing review API", () => {
   afterEach(async () => {
     if (server !== undefined) await closeHttpServer(server);
     database.close();
+  });
+
+  it("serves separate assessments and validates explicit sort dimensions", async () => {
+    const at = "2026-08-24T10:01:00.000Z";
+    const claim = database.enrichmentProcessing.claimNext(at)!;
+    database.enrichmentProcessing.completeSuccess(claim, {
+      schemaVersion: 1,
+      vehicle: { make: "Volkswagen", model: "Golf", variant: null, year: 2020,
+        mileageKm: 80_000, fuel: "diesel", transmission: "manual", powerHp: null },
+      price: { interpretation: "full_price", amountCents: 1_495_000 }, sellerType: null,
+      indicators: { financing: false, monthlyPayment: false, deposit: false, damaged: false, imported: false },
+      uncertainties: []
+    }, at, null);
+    new DealScoringService({ database: () => database }).recomputeAll(at);
+    for (const sort of ["recent", "market_value", "personal_fit", "confidence"]) {
+      const response = await getJson<{ listings: Array<{ score: unknown }> }>(`/api/listings?sort=${sort}`);
+      expect(response.listings[0]?.score).toMatchObject({
+        version: 2, marketValue: { status: "insufficient_data", discountPercent: null },
+        personalFit: { status: "no_preferences", percent: null }, confidence: { level: "low" }
+      });
+      expect(response.listings[0]?.score).not.toHaveProperty("total");
+    }
+    expect((await fetch(`${baseUrl}/api/listings?sort=unknown`)).status).toBe(400);
   });
 
   it("lists, filters, and persists the complete personal review workflow", async () => {
