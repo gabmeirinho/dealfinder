@@ -19,6 +19,18 @@ describe("scan scheduler", () => {
     database?.close();
   });
 
+  it("passes durable deep mode to the scanner after startup", async () => {
+    database = openDatabase({ filename: ":memory:" });
+    const search = createVerifiedSearch(database, "Deep", 1);
+    const modes: unknown[] = [];
+    database.scanRuns.enqueue(search.id, "manual", "2026-08-23T09:00:00.000Z", "deep");
+    const db = database;
+    scheduler = new ScanScheduler({ database: () => db, scanner: { scan: async (_id, mode) => { modes.push(mode); return scanResult(); } } });
+    scheduler.start();
+    await scheduler.whenIdle();
+    expect(modes).toEqual(["deep"]);
+  });
+
   it("runs one immediate catch-up sequentially in priority order", async () => {
     database = openDatabase({ filename: ":memory:" });
     const third = createVerifiedSearch(database, "Third", 3);

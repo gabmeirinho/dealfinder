@@ -12,6 +12,79 @@ describe("Facebook scanner", () => {
 
   afterEach(() => database?.close());
 
+  it("does not stop on listings known only to another search", async () => {
+    const setup = createSetup(); database = setup.database;
+    const otherDraft = createVehicleSearchDraft("Other model");
+    otherDraft.criteria.makeKeywords = { strength: "hard", value: ["BMW"] };
+    const other = database.searches.create(otherDraft);
+    markBaselineComplete(database, setup.searchId);
+    for (let index = 1; index <= 60; index++) persistKnown(database, other.id, index);
+    const browser = new FakeScanBrowser([{ cards: Array.from({ length: 61 }, (_, index) => card(index + 1)), atEnd: true }]);
+    const scanner = new FacebookScanner({ database: () => setup.database, browser: () => browser });
+    await expect(scanner.scan(setup.searchId)).resolves.toMatchObject({ cardsSeen: 61, newCandidates: 1, stopReason: "results_end" });
+    expect(database.rawCandidates.wasSeenInSearch(database.rawCandidates.get("facebook", candidate(1).sourceListingId)!.id, setup.searchId)).toBe(true);
+  });
+
+  it.each([false, true])("deep scans bypass initial and known limits (baseline complete: %s)", async (baselineComplete) => {
+    const setup = createSetup(); database = setup.database;
+    const search = database.searches.get(setup.searchId)!;
+    database.searches.update(search.id, { ...search, scanLimits: { initialCardLimit: 2, knownListingStopCount: 2, maxCards: 4, maxDurationSeconds: 120 } });
+    if (baselineComplete) markBaselineComplete(database, search.id);
+    for (let index = 1; index <= 5; index++) persistKnown(database, search.id, index);
+    const scanner = new FacebookScanner({ database: () => setup.database, browser: () => new FakeScanBrowser([{ cards: [1,2,3,4,5].map(card), atEnd: true }]) });
+    await expect(scanner.scan(search.id, "deep")).resolves.toMatchObject({ cardsSeen: 4, stopReason: "card_limit" });
+  });
+
+  it("uses configured thresholds on standard scans", async () => {
+    const setup = createSetup(); database = setup.database;
+    const search = database.searches.get(setup.searchId)!;
+    database.searches.update(search.id, { ...search, scanLimits: { initialCardLimit: 3, knownListingStopCount: 2, maxCards: 10, maxDurationSeconds: 120 } });
+    const scanner = new FacebookScanner({ database: () => setup.database, browser: () => new FakeScanBrowser([{ cards: [1,2,3,4].map(card), atEnd: true }]) });
+    await expect(scanner.scan(search.id)).resolves.toMatchObject({ cardsSeen: 3, stopReason: "initial_limit" });
+    markBaselineComplete(database, search.id);
+    await expect(scanner.scan(search.id)).resolves.toMatchObject({ cardsSeen: 2, stopReason: "known_streak" });
+  });
+
+  it("commits collected cards at the time budget without treating the snapshot as complete", async () => {
+    const setup = createSetup(); database = setup.database;
+    let elapsed = 0;
+    const browser = new FakeScanBrowser([{ cards: [card(1)], atEnd: false }]);
+    const scroll = browser.scrollMarketplaceResults.bind(browser);
+    browser.scrollMarketplaceResults = async () => { await scroll(); elapsed = 120000; };
+    const scanner = new FacebookScanner({ database: () => setup.database, browser: () => browser, monotonicNow: () => elapsed });
+    await expect(scanner.scan(setup.searchId, "deep")).resolves.toMatchObject({ cardsSeen: 1, stopReason: "time_limit" });
+    expect(database.rawCandidates.get("facebook", candidate(1).sourceListingId)).toBeDefined();
+    expect(browser.scrolls).toBe(1);
+    expect(database.database.prepare("SELECT complete_snapshot FROM listing_scan_ingestions WHERE search_id = ?").get(setup.searchId)).toMatchObject({ complete_snapshot: 0 });
+  });
+
+  it("waits through a blank at-end shell and collects cards when they render", async () => {
+    const setup = createSetup();
+    database = setup.database;
+    const browser = new FakeScanBrowser([
+      { cards: [], atEnd: true, page: marketplacePage("") },
+      { cards: [card(1)], atEnd: true, page: marketplacePage("Marketplace results") }
+    ]);
+    const scanner = new FacebookScanner({ database: () => setup.database, browser: () => browser });
+    await expect(scanner.scan(setup.searchId)).resolves.toMatchObject({ cardsSeen: 1, stopReason: "results_end" });
+    expect(browser.scrolls).toBe(1);
+  });
+
+  it("pauses only the affected search when a blank shell never renders", async () => {
+    const setup = createSetup();
+    database = setup.database;
+    const browser = new FakeScanBrowser([{ cards: [], atEnd: true, page: marketplacePage("") }]);
+    const failures: Array<{ kind: string; scope: string }> = [];
+    const scanner = new FacebookScanner({
+      database: () => setup.database, browser: () => browser,
+      failures: { pause: async (_id, failure) => { failures.push(failure); return { id: "partial" }; } }
+    });
+    await expect(scanner.scan(setup.searchId)).rejects.toMatchObject({ code: "FACEBOOK_PARTIAL_LOAD" });
+    expect(failures).toMatchObject([{ kind: "partial_load", scope: "search" }]);
+    expect(browser.scrolls).toBe(1);
+    expect(setup.database.scanRuns.hasSucceeded(setup.searchId)).toBe(false);
+  });
+
   it("caps an initial scan at 300 cards", async () => {
     const setup = createSetup();
     database = setup.database;

@@ -2,12 +2,16 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
 import type {
+  ScanMode,
+  ScanStopReason,
   ScanRun,
   ScanSchedule,
   ScanTrigger
 } from "@dealfinder/domain";
 
 interface ScanRunRow {
+  mode: ScanMode;
+  stop_reason: ScanStopReason | null;
   id: string;
   search_id: string;
   trigger: ScanTrigger;
@@ -29,6 +33,7 @@ interface ScanScheduleRow {
 }
 
 export interface CompleteScanRun {
+  stopReason?: ScanStopReason;
   runId: string;
   completedAt: string;
   cardsSeen: number;
@@ -47,15 +52,18 @@ export class ScanRunsRepository {
     private readonly createId: () => string = randomUUID
   ) {}
 
-  public enqueue(searchId: string, trigger: ScanTrigger, requestedAt: string): ScanRun {
+  public enqueue(searchId: string, trigger: ScanTrigger, requestedAt: string, mode: ScanMode = "standard"): ScanRun {
+    if (mode !== "standard" && mode !== "deep") throw new Error("Invalid scan mode");
     validateId(searchId, "Search ID");
     validateTimestamp(requestedAt, "Requested at");
     const id = this.createId();
     this.database.prepare(`
-      INSERT INTO scan_runs (id, search_id, trigger, state, requested_at)
-      VALUES (?, ?, ?, 'queued', ?)
+      INSERT INTO scan_runs (id, search_id, trigger, state, requested_at, mode)
+      VALUES (?, ?, ?, 'queued', ?, ?)
       ON CONFLICT DO NOTHING
-    `).run(id, searchId, trigger, requestedAt);
+    `).run(id, searchId, trigger, requestedAt, mode);
+    // A manual deep request upgrades queued work; routine wakes never downgrade it.
+    if (mode === "deep") this.database.prepare("UPDATE scan_runs SET mode = 'deep', trigger = 'manual' WHERE search_id = ? AND state = 'queued'").run(searchId);
     const queued = this.database.prepare(`
       SELECT ${RUN_COLUMNS}
       FROM scan_runs
@@ -92,9 +100,9 @@ export class ScanRunsRepository {
     const result = this.database.prepare(`
       UPDATE scan_runs
       SET state = 'succeeded', completed_at = ?, cards_seen = ?,
-          new_candidates = ?, error_code = NULL
+          new_candidates = ?, error_code = NULL, stop_reason = ?
       WHERE id = ? AND state = 'running'
-    `).run(input.completedAt, input.cardsSeen, input.newCandidates, input.runId);
+    `).run(input.completedAt, input.cardsSeen, input.newCandidates, input.stopReason ?? null, input.runId);
     if (result.changes !== 1) throw invalidTransition(input.runId, "succeeded");
     return this.requireRun(input.runId);
   }
@@ -124,6 +132,7 @@ export class ScanRunsRepository {
   }
 
   public requeueInterrupted(): number {
+    this.database.prepare(`UPDATE scan_runs SET mode = 'deep' WHERE state = 'queued' AND EXISTS (SELECT 1 FROM scan_runs running WHERE running.search_id = scan_runs.search_id AND running.state = 'running' AND running.mode = 'deep')`).run();
     const superseded = this.database.prepare(`
       UPDATE scan_runs
       SET state = 'failed', completed_at = requested_at, error_code = 'INTERRUPTED'
@@ -235,12 +244,14 @@ export class ScanRunsRepository {
 
 const RUN_COLUMNS = `
   id, search_id, trigger, state, requested_at, started_at, completed_at,
-  cards_seen, new_candidates, error_code
+  cards_seen, new_candidates, error_code, mode, stop_reason
 `;
 
 function mapRun(row: ScanRunRow): ScanRun {
   return {
     id: row.id,
+    mode: row.mode,
+    stopReason: row.stop_reason,
     searchId: row.search_id,
     trigger: row.trigger,
     state: row.state,

@@ -10,6 +10,8 @@ import {
 
 import {
   ACTIVE_SEARCH_SOFT_LIMIT,
+  DEFAULT_SCAN_LIMITS,
+  type ScanMode,
   SEARCH_RADIUS_OPTIONS_KM,
   type ConstraintStrength,
   type FuelType,
@@ -291,12 +293,12 @@ export function SearchDashboard({
     }
   };
 
-  const requestScan = async (search: ManagedVehicleSearch): Promise<void> => {
+  const requestScan = async (search: ManagedVehicleSearch, mode: ScanMode = "standard"): Promise<void> => {
     setPending(true);
     setError(null);
     try {
-      await client.requestScan(search.id);
-      setNotice(`Manual scan requested for ${search.name}.`);
+      await client.requestScan(search.id, mode);
+      setNotice(`${mode === "deep" ? "Deep" : "Manual"} scan requested for ${search.name}.`);
     } catch (scanError: unknown) {
       setError(messageFor(scanError, "The manual scan could not be requested."));
     } finally {
@@ -422,6 +424,7 @@ export function SearchDashboard({
               onToggle={() => void toggleActive(search)}
               onDelete={() => confirmDelete(search)}
               onScan={() => void requestScan(search)}
+              onDeepScan={() => void requestScan(search, "deep")}
               onVerify={() => void openVerification(search)}
               onMove={(direction) => void moveSearch(index, direction)}
             />
@@ -477,6 +480,7 @@ interface SearchRowProps {
   onToggle(): void;
   onDelete(): void;
   onScan(): void;
+  onDeepScan(): void;
   onVerify(): void;
   onMove(direction: -1 | 1): void;
 }
@@ -505,6 +509,7 @@ function SearchRow(props: SearchRowProps): ReactElement {
           </span>
         </div>
         <p className="criteria-summary">{summarizeCriteria(search)}</p>
+        <p className="criteria-summary">First scan: {(search.scanLimits ?? DEFAULT_SCAN_LIMITS).initialCardLimit} cards · Stop after {(search.scanLimits ?? DEFAULT_SCAN_LIMITS).knownListingStopCount} consecutive listings already seen in this search · Max {(search.scanLimits ?? DEFAULT_SCAN_LIMITS).maxCards} cards / {(search.scanLimits ?? DEFAULT_SCAN_LIMITS).maxDurationSeconds}s collection</p>
         <div className="constraint-key" aria-label="Constraint summary">
           <span>{search.criteria.modelTarget ? "Model target" : "Keyword search"}</span>
           <span><i className="hard-key" />{countStrength(search, "hard")} hard</span>
@@ -541,6 +546,7 @@ function SearchRow(props: SearchRowProps): ReactElement {
         <button type="button" onClick={props.onScan} disabled={props.pending || !search.active} title={search.active ? "Request manual scan" : "Activate this search before scanning"}>
           <Icon name="scan" /> Scan
         </button>
+        <button type="button" onClick={props.onDeepScan} disabled={props.pending || !search.active} title="Ignore the first-scan cap and known-listing threshold; maximum cards and collection time still apply">Deep scan</button>
         <button type="button" onClick={props.onToggle} disabled={props.pending}>
           <Icon name={search.active ? "pause" : "play"} /> {search.active ? "Pause" : "Activate"}
         </button>
@@ -663,6 +669,17 @@ export function SearchEditor({ editor, pending, active, onChange, onClose, onSav
           <FormSection title="Words that matter" description="Required and excluded terms are matched after marketplace results are collected.">
             <ConstraintTextField id="required-keywords" label="Required keywords" value={form.requiredKeywords} strength={form.requiredStrength} placeholder="service history, one owner" onValue={(value) => update("requiredKeywords", value)} onStrength={(value) => update("requiredStrength", value)} errors={errorsFor(fieldErrors, "criteria.requiredKeywords", "criteria.requiredKeywords.value")} />
             <ConstraintTextField id="excluded-keywords" label="Excluded keywords" value={form.excludedKeywords} strength={form.excludedStrength} placeholder="damaged, parts only" onValue={(value) => update("excludedKeywords", value)} onStrength={(value) => update("excludedStrength", value)} errors={errorsFor(fieldErrors, "criteria.excludedKeywords", "criteria.excludedKeywords.value")} />
+          </FormSection>
+
+          <FormSection title="Scan limits" description="A new listing for this search resets the known-listing counter. Deep scan skips that counter and the first-scan cap. Changing these limits does not require Facebook verification again.">
+            <FieldErrors id="scan-limits-error" errors={errorsFor(fieldErrors, "scanLimits")} />
+            <div className="field-grid two-column">
+              <TextField id="initial-card-limit" label="First-scan card limit" value={form.initialCardLimit} onChange={(value) => update("initialCardLimit", value)} errors={errorsFor(fieldErrors, "scanLimits.initialCardLimit")} type="number" min="1" max="10000" />
+              <TextField id="known-listing-limit" label="Consecutive known listings" value={form.knownListingStopCount} onChange={(value) => update("knownListingStopCount", value)} errors={errorsFor(fieldErrors, "scanLimits.knownListingStopCount")} type="number" min="1" max="1000" />
+              <TextField id="max-card-limit" label="Maximum cards per scan" value={form.maxCards} onChange={(value) => update("maxCards", value)} errors={errorsFor(fieldErrors, "scanLimits.maxCards")} type="number" min="1" max="10000" />
+              <TextField id="scan-time-limit" label="Collection time budget (seconds)" value={form.maxDurationSeconds} onChange={(value) => update("maxDurationSeconds", value)} errors={errorsFor(fieldErrors, "scanLimits.maxDurationSeconds")} type="number" min="15" max="1800" />
+            </div>
+            <p className="nationwide-note">Card and time budgets apply to every scan, including deep scans. Time is checked between browser operations; an operation already underway and follow-up processing may finish after the budget. Deep scans start from the top and do not guarantee complete coverage.</p>
           </FormSection>
 
           <FormSection title="Search area" description="Use a radius from one origin, or search across Portugal.">

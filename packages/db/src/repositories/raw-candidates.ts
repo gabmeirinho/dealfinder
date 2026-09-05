@@ -140,6 +140,10 @@ export class RawCandidatesRepository {
     return row === undefined ? undefined : mapCandidate(row);
   }
 
+  public wasSeenInSearch(candidateId: number, searchId: string): boolean {
+    return this.database.prepare("SELECT 1 FROM raw_candidate_observations WHERE candidate_id = ? AND search_id = ? LIMIT 1").get(candidateId, searchId) !== undefined;
+  }
+
   public listObservations(candidateId: number): RawCandidateObservation[] {
     return (this.database.prepare(`
       SELECT id, candidate_id, search_id, observed_at, title, displayed_price,

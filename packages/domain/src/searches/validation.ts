@@ -1,3 +1,4 @@
+import { DEFAULT_SCAN_LIMITS, type ScanLimits } from "../scanning/types.js";
 import { canonicalModelTarget } from "./model-target.js";
 import {
   SEARCH_RADIUS_OPTIONS_KM,
@@ -62,6 +63,7 @@ export function validateVehicleSearch(
     addIssue(issues, "active", "must be a boolean");
   }
 
+  const scanLimits = validateScanLimits(input.scanLimits, issues);
   validateCriteria(input.criteria, issues, currentYear);
   const location = validateLocation(input, issues);
 
@@ -96,6 +98,7 @@ export function validateVehicleSearch(
 
   const value: ValidatedVehicleSearchDraft = {
     name,
+    scanLimits,
     priority: input.priority,
     active: input.active,
     criteria: normalizeCriteria(input.criteria),
@@ -318,4 +321,24 @@ function normalizeSelection<T extends string>(
 
 function addIssue(issues: SearchValidationIssue[], path: string, message: string): void {
   issues.push({ path, message });
+}
+
+function validateScanLimits(input: unknown, issues: SearchValidationIssue[]): ScanLimits {
+  if (input === undefined) return { ...DEFAULT_SCAN_LIMITS };
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    addIssue(issues, "scanLimits", "must be a scan limits object");
+    return { ...DEFAULT_SCAN_LIMITS };
+  }
+  const limits = input as ScanLimits;
+  for (const [field, minimum, maximum] of [
+    ["initialCardLimit", 1, 10000], ["knownListingStopCount", 1, 1000],
+    ["maxCards", 1, 10000], ["maxDurationSeconds", 15, 1800]
+  ] as const) {
+    if (!Number.isInteger(limits[field]) || limits[field] < minimum || limits[field] > maximum) {
+      addIssue(issues, `scanLimits.${field}`, `must be an integer from ${minimum} to ${maximum}`);
+    }
+  }
+  if (limits.initialCardLimit > limits.maxCards) addIssue(issues, "scanLimits.initialCardLimit", "must not exceed the maximum cards per scan");
+  if (limits.knownListingStopCount > limits.maxCards) addIssue(issues, "scanLimits.knownListingStopCount", "must not exceed the maximum cards per scan");
+  return { initialCardLimit: limits.initialCardLimit, knownListingStopCount: limits.knownListingStopCount, maxCards: limits.maxCards, maxDurationSeconds: limits.maxDurationSeconds };
 }

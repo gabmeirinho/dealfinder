@@ -14,6 +14,7 @@ interface SearchRow {
   priority: number;
   is_active: number;
   criteria_json: string;
+  scan_limits_json: string;
   location_mode: "radius" | "nationwide";
   origin: string | null;
   radius_km: number | null;
@@ -37,9 +38,9 @@ export class SearchesRepository {
     this.database
       .prepare(`
         INSERT INTO searches (
-          id, name, priority, is_active, criteria_json,
+          id, name, priority, is_active, criteria_json, scan_limits_json,
           location_mode, origin, radius_km, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .run(
         id,
@@ -47,6 +48,7 @@ export class SearchesRepository {
         search.priority,
         search.active ? 1 : 0,
         JSON.stringify(search.criteria),
+        JSON.stringify(search.scanLimits),
         search.location.mode,
         search.location.origin,
         search.location.radiusKm,
@@ -63,7 +65,7 @@ export class SearchesRepository {
     validateId(id);
     const row = this.database
       .prepare(`
-        SELECT id, name, priority, is_active, criteria_json,
+        SELECT id, name, priority, is_active, criteria_json, scan_limits_json,
                location_mode, origin, radius_km, created_at, updated_at
         FROM searches
         WHERE id = ?
@@ -76,7 +78,7 @@ export class SearchesRepository {
   public list(): VehicleSearch[] {
     const rows = this.database
       .prepare(`
-        SELECT id, name, priority, is_active, criteria_json,
+        SELECT id, name, priority, is_active, criteria_json, scan_limits_json,
                location_mode, origin, radius_km, created_at, updated_at
         FROM searches
         ORDER BY priority ASC, created_at ASC, id ASC
@@ -97,6 +99,7 @@ export class SearchesRepository {
           priority = ?,
           is_active = ?,
           criteria_json = ?,
+          scan_limits_json = ?,
           location_mode = ?,
           origin = ?,
           radius_km = ?,
@@ -108,6 +111,7 @@ export class SearchesRepository {
         search.priority,
         search.active ? 1 : 0,
         JSON.stringify(search.criteria),
+        JSON.stringify(search.scanLimits),
         search.location.mode,
         search.location.origin,
         search.location.radiusKm,
@@ -137,6 +141,7 @@ function mapSearch(row: SearchRow): VehicleSearch {
     priority: row.priority,
     active: row.is_active === 1,
     criteria,
+    scanLimits: JSON.parse(row.scan_limits_json),
     location: {
       mode: row.location_mode,
       origin: row.origin,

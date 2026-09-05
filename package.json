@@ -14,7 +14,7 @@
     "packages/db"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build --workspace @dealfinder/domain && npm run build --workspace @dealfinder/db && npm run build --workspace @dealfinder/server && npm run build --workspace @dealfinder/web",
     "browser:install": "playwright install chromium",
     "dev": "npm run build && concurrently --kill-others --names api,web \"node apps/server/dist/main.js\" \"npm run dev --workspace @dealfinder/web\"",
     "fixtures:check": "node scripts/check-facebook-fixtures.mjs",

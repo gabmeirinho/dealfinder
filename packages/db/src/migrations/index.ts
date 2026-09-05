@@ -19,6 +19,7 @@ import { listingDetailFactsMigration } from "./018-listing-detail-facts.js";
 import { listingDetailCaptureAttemptsMigration } from "./019-listing-detail-capture-attempts.js";
 import { incompleteListingMatchesMigration } from "./020-incomplete-listing-matches.js";
 import { separateDealAssessmentsMigration } from "./021-separate-deal-assessments.js";
+import { scanLimitsMigration } from "./022-scan-limits.js";
 import type { Migration } from "./types.js";
 
 export const allMigrations: readonly Migration[] = [
@@ -42,7 +43,8 @@ export const allMigrations: readonly Migration[] = [
   listingDetailFactsMigration,
   listingDetailCaptureAttemptsMigration,
   incompleteListingMatchesMigration,
-  separateDealAssessmentsMigration
+  separateDealAssessmentsMigration,
+  scanLimitsMigration
 ];
 
 export const LATEST_SCHEMA_VERSION =

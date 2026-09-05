@@ -1,7 +1,8 @@
 import type { DatabaseConnection } from "@dealfinder/db";
 import {
-  INITIAL_SCAN_CARD_LIMIT,
-  KNOWN_LISTING_STOP_COUNT
+  DEFAULT_SCAN_LIMITS,
+  type ScanMode,
+  type ScanStopReason
 } from "@dealfinder/domain";
 
 import type { MarketplaceResultSnapshot } from "../../../modules/browser/index.js";
@@ -28,7 +29,7 @@ export interface FacebookScanResult {
   cardsSeen: number;
   newCandidates: number;
   initialScan: boolean;
-  stopReason: "initial_limit" | "known_streak" | "results_end" | "no_progress";
+  stopReason: ScanStopReason;
 }
 
 const MIN_CARDS_FOR_PARTIAL_TOLERANCE = 10;
@@ -45,6 +46,7 @@ export interface FacebookScannerOptions {
   browser: () => FacebookScanBrowser;
   afterScan?: (searchId: string) => Promise<void>;
   now?: () => Date;
+  monotonicNow?: () => number;
   failures?: {
     pause(
       searchId: string,
@@ -65,6 +67,7 @@ export class FacebookScanner {
   readonly #browser: () => FacebookScanBrowser;
   readonly #afterScan: ((searchId: string) => Promise<void>) | undefined;
   readonly #now: () => Date;
+  readonly #monotonicNow: () => number;
   readonly #failures: FacebookScannerOptions["failures"];
   readonly #geocodingProvider: GeocodingProvider | undefined;
   readonly #processingWake: (() => void) | undefined;
@@ -75,13 +78,15 @@ export class FacebookScanner {
     this.#browser = options.browser;
     this.#afterScan = options.afterScan;
     this.#now = options.now ?? (() => new Date());
+    this.#monotonicNow = options.monotonicNow ?? (() => performance.now());
     this.#failures = options.failures;
     this.#geocodingProvider = options.geocodingProvider;
     this.#processingWake = options.processingWake;
     this.#onStageError = options.onStageError;
   }
 
-  public async scan(searchId: string): Promise<FacebookScanResult> {
+  public async scan(searchId: string, mode: ScanMode = "standard"): Promise<FacebookScanResult> {
+    if (mode !== "standard" && mode !== "deep") throw new FacebookScannerError("INVALID_SCAN_MODE", "Scan mode must be standard or deep");
     const database = this.#database();
     const search = database.searches.get(searchId);
     if (search === undefined) throw new FacebookScannerError("SEARCH_NOT_FOUND", "Saved search not found");
@@ -102,6 +107,8 @@ export class FacebookScanner {
       const initialScan = !database.scanRuns.hasSucceeded(searchId);
       const observedAt = this.#now().toISOString();
       const browser = this.#browser();
+      const limits = search.scanLimits ?? DEFAULT_SCAN_LIMITS;
+      const deadline = this.#monotonicNow() + limits.maxDurationSeconds * 1000;
       await browser.navigate(verification.sourceUrl);
       const seenThisScan = new Set<string>();
       const staged: FacebookRawCandidate[] = [];
@@ -110,12 +117,20 @@ export class FacebookScanner {
       let consecutiveKnown = 0;
       let unchangedSnapshots = 0;
 
+      const finish = async (stopReason: ScanStopReason): Promise<FacebookScanResult> => {
+        phase = "ingestion";
+        return this.commit(searchId, observedAt, staged, { cardsSeen, newCandidates, initialScan, stopReason });
+      };
       while (true) {
+        // Cooperative deadline: finish the in-flight browser operation before releasing
+        // the shared browser. Never race it against another search's navigation.
+        if (this.#monotonicNow() >= deadline) return await finish("time_limit");
         phase = "snapshot";
         const snapshot = await browser.snapshotMarketplaceResults();
         let newIdsInSnapshot = 0;
         const classified = classifyFacebookPage(snapshot, { unchangedSnapshots });
         if (classified !== null) await this.pause(searchId, classified, snapshot);
+        if (this.#monotonicNow() >= deadline) return await finish("time_limit");
         if (snapshot.cards.length > 0) {
           phase = "parsing";
           let parsed: FacebookResultPage;
@@ -131,30 +146,31 @@ export class FacebookScanner {
             await this.pause(searchId, selectorContractFailure(), snapshot);
           }
           for (const candidate of parsed.candidates) {
+            if (this.#monotonicNow() >= deadline) return await finish("time_limit");
             if (seenThisScan.has(candidate.sourceListingId)) continue;
             seenThisScan.add(candidate.sourceListingId);
             newIdsInSnapshot += 1;
             cardsSeen += 1;
-            const known = database.rawCandidates.get("facebook", candidate.sourceListingId) !== undefined;
+            const existing = database.rawCandidates.get("facebook", candidate.sourceListingId);
+            const knownInSearch = existing !== undefined && database.rawCandidates.wasSeenInSearch(existing.id, searchId);
             staged.push(candidate);
-            if (known) consecutiveKnown += 1;
-            else {
-              consecutiveKnown = 0;
-              newCandidates += 1;
-            }
+            if (knownInSearch) consecutiveKnown += 1;
+            else consecutiveKnown = 0;
+            if (existing === undefined) newCandidates += 1;
 
-            if (initialScan && cardsSeen >= INITIAL_SCAN_CARD_LIMIT) {
+            if (mode === "standard" && initialScan && cardsSeen >= limits.initialCardLimit) {
               phase = "ingestion";
               return await this.commit(searchId, observedAt, staged, {
                 cardsSeen, newCandidates, initialScan, stopReason: "initial_limit"
               });
             }
-            if (!initialScan && consecutiveKnown >= KNOWN_LISTING_STOP_COUNT) {
+            if (mode === "standard" && !initialScan && consecutiveKnown >= limits.knownListingStopCount) {
               phase = "ingestion";
               return await this.commit(searchId, observedAt, staged, {
                 cardsSeen, newCandidates, initialScan, stopReason: "known_streak"
               });
             }
+            if (cardsSeen >= limits.maxCards) return await finish("card_limit");
           }
         }
 
@@ -164,7 +180,10 @@ export class FacebookScanner {
         });
         if (stalledFailure !== null) await this.pause(searchId, stalledFailure, snapshot);
 
-        if (snapshot.atEnd) {
+        // A short, blank client-side document is also geometrically at its end.
+        // Give it another bounded snapshot instead of recording a complete scan.
+        const unresolvedEmptyPage = snapshot.cards.length === 0 && snapshot.page !== undefined;
+        if (snapshot.atEnd && !unresolvedEmptyPage && !snapshot.page?.loading) {
           phase = "ingestion";
           return await this.commit(searchId, observedAt, staged, {
             cardsSeen, newCandidates, initialScan, stopReason: "results_end"

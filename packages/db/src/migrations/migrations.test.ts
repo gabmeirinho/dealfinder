@@ -28,7 +28,7 @@ describe("database migrations", () => {
 
     expect(testDatabase.connection.migrationResult).toEqual({
       currentVersion: LATEST_SCHEMA_VERSION,
-      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
     });
     const migrations = testDatabase.connection.database
       .prepare("SELECT version, name FROM schema_migrations ORDER BY version")
@@ -54,7 +54,8 @@ describe("database migrations", () => {
       { version: 18, name: "listing_detail_facts" },
       { version: 19, name: "listing_detail_capture_attempts" },
       { version: 20, name: "incomplete_listing_matches" },
-      { version: 21, name: "separate_deal_assessments" }
+      { version: 21, name: "separate_deal_assessments" },
+      { version: 22, name: "scan_limits" }
     ]);
   });
 
@@ -97,7 +98,9 @@ describe("database migrations", () => {
     });
     const draft = createVehicleSearchDraft("Existing Golf search");
     draft.criteria.makeKeywords = { value: ["Volkswagen"], strength: "hard" };
-    const search = database.searches.create(draft);
+    const search = { id: "legacy-search" };
+    database.database.prepare(`INSERT INTO searches (id, name, priority, is_active, criteria_json, location_mode, origin, radius_km, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(search.id, draft.name, draft.priority, draft.active ? 1 : 0, JSON.stringify(draft.criteria), draft.location.mode, draft.location.origin, draft.location.radiusKm, "2026-08-19T00:00:00.000Z", "2026-08-19T00:00:00.000Z");
     insertLegacyRawObservation(database.database, search.id, {
       sourceListingId: "100000000000001",
       observedAt: "2026-08-22T09:00:00.000Z",
@@ -108,7 +111,7 @@ describe("database migrations", () => {
     });
 
     const result = runMigrations(database.database, allMigrations, () => new Date("2026-08-23"));
-    expect(result.appliedVersions).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+    expect(result.appliedVersions).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
     const listing = database.database.prepare(`
       SELECT id, discovery_kind FROM listings WHERE source_listing_id = ?
     `).get("100000000000001") as unknown as { id: number; discovery_kind: string };
@@ -126,7 +129,9 @@ describe("database migrations", () => {
     });
     const draft = createVehicleSearchDraft("Existing queue listing");
     draft.criteria.makeKeywords = { value: ["BMW"], strength: "hard" };
-    const search = database.searches.create(draft);
+    const search = { id: "legacy-search" };
+    database.database.prepare(`INSERT INTO searches (id, name, priority, is_active, criteria_json, location_mode, origin, radius_km, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(search.id, draft.name, draft.priority, draft.active ? 1 : 0, JSON.stringify(draft.criteria), draft.location.mode, draft.location.origin, draft.location.radiusKm, "2026-08-19T00:00:00.000Z", "2026-08-19T00:00:00.000Z");
     const raw = insertLegacyRawObservation(database.database, search.id, {
       sourceListingId: "100000000000007",
       observedAt: "2026-08-23T09:00:00.000Z",
@@ -150,7 +155,7 @@ describe("database migrations", () => {
     database.enrichmentProcessing.enqueue(listing.id, "2026-08-23T09:00:00.000Z");
 
     expect(runMigrations(database.database, allMigrations, () => new Date("2026-08-23")))
-      .toEqual({ currentVersion: 21, appliedVersions: [15, 16, 17, 18, 19, 20, 21] });
+      .toEqual({ currentVersion: 22, appliedVersions: [15, 16, 17, 18, 19, 20, 21, 22] });
     expect(database.enrichmentProcessing.getQueueItem(listing.id)).toMatchObject({ state: "queued" });
 
     database.database.prepare(`

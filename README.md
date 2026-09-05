@@ -21,6 +21,38 @@ substrings; case, accents, punctuation and common make aliases such as VW are
 normalized. Custom model names are supported, but there is no exhaustive model or
 trim alias catalog. Existing keyword searches remain available through **New search**.
 
+## Scan limits and deep scans
+
+Each saved search has editable **Scan limits**. Existing searches start with:
+
+| Setting | Default | Allowed range |
+| --- | ---: | ---: |
+| First-scan card limit | 300 | 1–10,000 |
+| Consecutive known listings | 50 | 1–1,000 |
+| Maximum cards per scan | 1,000 | 1–10,000 |
+| Collection time budget | 120 seconds | 15–1,800 seconds |
+
+The first-scan cap and known threshold cannot exceed the maximum card budget.
+A standard first scan uses the initial cap. Later standard scans stop at the known
+threshold, counting only distinct listings previously observed **in that search**.
+A listing known only through another search resets the counter, while global
+listing IDs still prevent duplicate records. Repeated cards in one scan do not
+advance the counter.
+
+**Deep scan** bypasses the first-scan cap and known threshold, but retains maximum
+cards and collection time. It starts from the top; it does not resume pagination or
+guarantee complete inventory coverage. Requests are durable: deep requests upgrade
+queued standard scans and remain deep after restart. Scheduled scans stay standard.
+Limits are read when a scan begins; edits do not require Facebook reverification.
+
+Time is checked between browser operations using a monotonic clock. An operation
+already in flight finishes before the shared browser moves to another search;
+ingestion and subsequent detail/enrichment processing are outside the collection
+budget. Partial results are retained on budget exhaustion, and incomplete scans do
+not count as full snapshots for detecting disappeared listings. Each completed run
+stores its stop reason (`initial_limit`, `known_streak`, `card_limit`, `time_limit`,
+`results_end`, or `no_progress`).
+
 ## Requirements
 
 - Node.js 22.5 or newer (for the built-in `node:sqlite` module)

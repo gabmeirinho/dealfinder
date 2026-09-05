@@ -1,5 +1,6 @@
 import type {
   ManagedVehicleSearch,
+  ScanMode,
   ScanQueueReceipt,
   VehicleSearchDraft
 } from "@dealfinder/domain";
@@ -36,7 +37,7 @@ export interface SearchApiClient {
   pause(id: string): Promise<ManagedVehicleSearch>;
   delete(id: string): Promise<void>;
   reprioritize(searchIds: readonly string[]): Promise<ManagedVehicleSearch[]>;
-  requestScan(id: string): Promise<ScanQueueReceipt>;
+  requestScan(id: string, mode?: ScanMode): Promise<ScanQueueReceipt>;
 }
 
 export function createSearchApiClient(request: typeof fetch = fetch): SearchApiClient {
@@ -104,10 +105,10 @@ export function createSearchApiClient(request: typeof fetch = fetch): SearchApiC
       );
       return body.searches;
     },
-    requestScan: (id) => send(
+    requestScan: (id, mode = "standard") => send(
       request,
       `/api/searches/${encodeURIComponent(id)}/scan`,
-      { method: "POST" }
+      { method: "POST", body: JSON.stringify({ mode }) }
     )
   };
 }

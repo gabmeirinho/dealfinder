@@ -10,6 +10,22 @@ describe("scan runs repository", () => {
 
   afterEach(() => testDatabase?.cleanup());
 
+  it("upgrades queued scans to deep and preserves intent across restart recovery", () => {
+    testDatabase = createTestDatabase();
+    const search = createSearch(testDatabase);
+    const repository = testDatabase.connection.scanRuns;
+    const first = repository.enqueue(search.id, "scheduled", "2026-08-23T09:00:00.000Z");
+    const deep = repository.enqueue(search.id, "manual", "2026-08-23T09:01:00.000Z", "deep");
+    expect(deep).toMatchObject({ id: first.id, mode: "deep", trigger: "manual" });
+    expect(repository.enqueue(search.id, "startup", "2026-08-23T09:02:00.000Z").mode).toBe("deep");
+    repository.markRunning(deep.id, "2026-08-23T09:03:00.000Z");
+    const queued = repository.enqueue(search.id, "scheduled", "2026-08-23T09:04:00.000Z");
+    repository.requeueInterrupted();
+    expect(repository.get(queued.id)?.mode).toBe("deep");
+    repository.markRunning(queued.id, "2026-08-23T09:05:00.000Z");
+    expect(repository.complete({ runId: queued.id, cardsSeen: 1000, newCandidates: 3, completedAt: "2026-08-23T09:07:00.000Z", stopReason: "card_limit" })).toMatchObject({ mode: "deep", stopReason: "card_limit" });
+  });
+
   it("persists an idempotent queued run and its state transitions", () => {
     testDatabase = createTestDatabase();
     const search = createSearch(testDatabase);

@@ -20,6 +20,15 @@ describe("searches repository", () => {
     testDatabase = undefined;
   });
 
+  it("persists scan limits across reopening the database", () => {
+    testDatabase = createTestDatabase();
+    const draft = completeSearch();
+    draft.scanLimits = { initialCardLimit: 500, knownListingStopCount: 100, maxCards: 1500, maxDurationSeconds: 180 };
+    const saved = testDatabase.connection.searches.create(draft);
+    reopenedConnection = openDatabase({ filename: testDatabase.filename });
+    expect(reopenedConnection.searches.get(saved.id)?.scanLimits).toEqual(draft.scanLimits);
+  });
+
   it("round-trips every criterion without losing hard and soft semantics", () => {
     const now = new Date("2026-08-19T10:30:00.000Z");
     testDatabase = createTestDatabase();

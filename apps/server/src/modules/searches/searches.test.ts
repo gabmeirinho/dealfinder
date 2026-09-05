@@ -37,6 +37,22 @@ describe("saved-search management API", () => {
     database.close();
   });
 
+  it("validates scan budgets, preserves them on pause, and keeps verification valid", async () => {
+    const draft = searchDraft("Configured", 1);
+    draft.scanLimits = { initialCardLimit: 500, knownListingStopCount: 100, maxCards: 1500, maxDurationSeconds: 180 };
+    const created = await json(await api("/api/searches", { method: "POST", body: JSON.stringify(draft) }));
+    expect(created.search.scanLimits).toEqual(draft.scanLimits);
+    const before = fingerprintSearchCriteria(created.search);
+    const updated = { ...draft, scanLimits: { ...draft.scanLimits, knownListingStopCount: 150 } };
+    const saved = await json(await api(`/api/searches/${created.search.id}`, { method: "PUT", body: JSON.stringify(updated) }));
+    expect(fingerprintSearchCriteria(saved.search)).toBe(before);
+    expect((await json(await api(`/api/searches/${created.search.id}/pause`, { method: "POST" }))).search.scanLimits).toEqual(updated.scanLimits);
+    for (const limits of [null, {}, { ...draft.scanLimits, maxCards: 20 }, { ...draft.scanLimits, maxDurationSeconds: 0 }]) {
+      expect((await api("/api/searches", { method: "POST", body: JSON.stringify({ ...draft, scanLimits: limits }) })).status).toBe(422);
+    }
+    expect((await api(`/api/searches/${created.search.id}/scan`, { method: "POST", body: JSON.stringify({ mode: "unbounded" }) })).status).toBe(400);
+  });
+
   it("creates independent canonical model targets and rolls back invalid or over-limit batches", async () => {
     const target = (make: string, model: string): VehicleSearchDraft => ({
       ...createVehicleSearchDraft(`${make} ${model}`),
@@ -334,6 +350,10 @@ describe("saved-search management API", () => {
       status: "pending",
       requestedAt: "2026-08-19T12:30:00.000Z"
     });
+
+    const deepResponse = await api(`/api/searches/${active.id}/scan`, { method: "POST", body: JSON.stringify({ mode: "deep" }) });
+    expect(deepResponse.status).toBe(202);
+    expect(database.scanRuns.listQueued()).toMatchObject([{ searchId: active.id, mode: "deep" }]);
 
     const pausedDraft = searchDraft("Paused");
     pausedDraft.active = false;

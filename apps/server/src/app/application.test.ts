@@ -82,7 +82,9 @@ describe("application runtime", () => {
     });
     const draft = createVehicleSearchDraft("Golf");
     draft.criteria.makeKeywords = { value: ["Volkswagen"], strength: "hard" };
-    const search = seed.searches.create(draft);
+    const search = { id: "legacy-search" };
+    seed.database.prepare(`INSERT INTO searches (id, name, priority, is_active, criteria_json, location_mode, origin, radius_km, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(search.id, draft.name, draft.priority, draft.active ? 1 : 0, JSON.stringify(draft.criteria), draft.location.mode, draft.location.origin, draft.location.radiusKm, "2026-08-19T00:00:00.000Z", "2026-08-19T00:00:00.000Z");
     const raw = insertLegacyRawObservation(seed.database, search.id, {
       sourceListingId: "100000000000005",
       observedAt: "2026-08-23T09:00:00.000Z",

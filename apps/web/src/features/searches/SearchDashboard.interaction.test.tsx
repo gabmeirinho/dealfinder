@@ -15,6 +15,24 @@ import { SearchDashboard } from "./SearchDashboard.js";
 afterEach(cleanup);
 
 describe("saved-search dashboard interactions", () => {
+  it("edits scan budgets and requests a deep scan explicitly", async () => {
+    const user = userEvent.setup();
+    const search = managedSearch("golf", "Golf", 1);
+    const update = vi.fn(async (id: string, draft: VehicleSearchDraft) => fromDraft(id, draft));
+    const requestScan = vi.fn(createClient({}).requestScan);
+    render(<SearchDashboard client={createClient({ update, requestScan })} initialSearches={[search]} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const threshold = screen.getByLabelText("Consecutive known listings");
+    await user.clear(threshold);
+    await user.type(threshold, "100");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(update.mock.calls[0]![1].scanLimits).toEqual({ initialCardLimit: 300, knownListingStopCount: 100, maxCards: 1000, maxDurationSeconds: 120 });
+    await user.click(await screen.findByRole("button", { name: "Deep scan" }));
+    expect(requestScan).toHaveBeenCalledWith("golf", "deep");
+    await user.click(screen.getByRole("button", { name: "Scan" }));
+    expect(requestScan).toHaveBeenLastCalledWith("golf", "standard");
+  });
+
   it("adds multiple model targets with shared filters and individual overrides", async () => {
     const user = userEvent.setup();
     const createModels = vi.fn(async (drafts: VehicleSearchDraft[]) => drafts.map((draft, index) => fromDraft(`model-${index}`, draft)));
