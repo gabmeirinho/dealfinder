@@ -86,9 +86,15 @@ function comparePair(
     : imageHashSimilarity(left.imageDifferenceHash, right.imageDifferenceHash);
   const enoughText = Math.min(left.textTokens.length, right.textTokens.length) >= 5 && textSimilarity >= 0.55;
   const enoughImage = imageSimilarity !== null && imageSimilarity >= 0.82;
-  if (vehicleSimilarity < 0.65 || (!enoughText && !enoughImage)) return null;
+  const descriptionEvidence = left.hasDescription && right.hasDescription && enoughText;
+  const sparseCardEvidence = (!left.hasDescription || !right.hasDescription) &&
+    isStrongSparseCardMatch(left, right, textSimilarity);
+  if (vehicleSimilarity < 0.65 || (!descriptionEvidence && !enoughImage && !sparseCardEvidence)) {
+    return null;
+  }
   const high = vehicleSimilarity >= 0.85 &&
-    ((imageSimilarity !== null && imageSimilarity >= 0.9) || textSimilarity >= 0.8);
+    ((imageSimilarity !== null && imageSimilarity >= 0.9) ||
+      (descriptionEvidence && textSimilarity >= 0.8) || sparseCardEvidence);
   const confidence = high ? "high" : "medium";
   return {
     leftListingId: left.listingId,
@@ -99,6 +105,33 @@ function comparePair(
     imageSimilarity,
     explanation: `Vehicle ${percent(vehicleSimilarity)}, text ${percent(textSimilarity)}, image ${imageSimilarity === null ? "unavailable" : percent(imageSimilarity)}; ${confidence} probable duplicate`
   };
+}
+
+function isStrongSparseCardMatch(
+  left: DuplicateCandidateFingerprint,
+  right: DuplicateCandidateFingerprint,
+  textSimilarity: number
+): boolean {
+  const leftVehicle = left.vehicle;
+  const rightVehicle = right.vehicle;
+  if (Math.min(left.textTokens.length, right.textTokens.length) < 5 || textSimilarity < 0.8) {
+    return false;
+  }
+  if (leftVehicle.variant === null || rightVehicle.variant === null ||
+      leftVehicle.variant !== rightVehicle.variant) return false;
+  if (leftVehicle.year === null || rightVehicle.year === null ||
+      Math.abs(leftVehicle.year - rightVehicle.year) > 1) return false;
+  if (leftVehicle.mileageKm === null || rightVehicle.mileageKm === null ||
+      Math.abs(leftVehicle.mileageKm - rightVehicle.mileageKm) > 5_000) return false;
+  if (leftVehicle.fuel === null || leftVehicle.fuel !== rightVehicle.fuel ||
+      leftVehicle.transmission === null ||
+      leftVehicle.transmission !== rightVehicle.transmission) return false;
+  return similarPrice(left.priceCents, right.priceCents);
+}
+
+function similarPrice(left: number | null, right: number | null): boolean {
+  if (left === null || right === null || left <= 0 || right <= 0) return false;
+  return Math.abs(left - right) / Math.max(left, right) <= 0.1;
 }
 
 function compareVehicles(left: VehicleDuplicateFingerprint, right: VehicleDuplicateFingerprint): number {

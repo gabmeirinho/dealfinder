@@ -50,6 +50,24 @@ describe("duplicate fingerprints and grouping", () => {
     expect(groups[0]).toMatchObject({ memberListingIds: [1, 2], confidence: "high" });
   });
 
+  it("requires stronger vehicle, text, and price evidence for sparse cards", () => {
+    const sparse = { hasDescription: false, imageDifferenceHash: null };
+    expect(groupProbableDuplicates([
+      candidate(1, sparse),
+      candidate(2, { ...sparse, priceCents: 2_050_000, vehicle: { ...vehicle(), mileageKm: 83_000 } })
+    ])).toHaveLength(1);
+
+    expect(groupProbableDuplicates([
+      candidate(1, sparse),
+      candidate(2, { ...sparse, priceCents: 2_300_000, vehicle: { ...vehicle(), mileageKm: 83_000 } })
+    ])).toEqual([]);
+
+    expect(groupProbableDuplicates([
+      candidate(1, sparse),
+      candidate(2, { ...sparse, vehicle: { ...vehicle(), variant: "luxury" } })
+    ])).toEqual([]);
+  });
+
   it("leaves ambiguous same-model cars separate without corroboration", () => {
     expect(groupProbableDuplicates([
       candidate(1, { textTokens: ["bmw", "320d", "2020"], imageDifferenceHash: null }),
@@ -108,6 +126,8 @@ function candidate(
     textTokens: ["320d", "automatic", "diesel", "history", "leather", "navigation"],
     vehicle: vehicle(),
     imageDifferenceHash: null,
+    hasDescription: true,
+    priceCents: 2_000_000,
     ...overrides
   };
 }

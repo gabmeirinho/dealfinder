@@ -84,7 +84,17 @@ export class DuplicateDetectionService {
         computedAt
       );
       if (eligibleForAttention) {
-        candidates.push({ listingId: listing.id, textTokens, vehicle, imageDifferenceHash });
+        candidates.push({
+          listingId: listing.id,
+          textTokens,
+          vehicle,
+          imageDifferenceHash,
+          hasDescription: facts.original.description?.trim() !== "" &&
+            facts.original.description != null,
+          priceCents: enrichment.price.interpretation === "full_price"
+            ? enrichment.price.amountCents
+            : null
+        });
       }
     }
     return database.duplicates.replaceGroups(groupProbableDuplicates(candidates), computedAt);

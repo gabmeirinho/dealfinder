@@ -17,6 +17,8 @@ export interface DuplicateCandidateFingerprint {
   textTokens: readonly string[];
   vehicle: VehicleDuplicateFingerprint;
   imageDifferenceHash: string | null;
+  hasDescription: boolean;
+  priceCents: number | null;
 }
 
 export interface DuplicatePairEvidence {
