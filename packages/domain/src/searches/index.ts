@@ -1,3 +1,4 @@
+export { canonicalMake, canonicalModelTarget, identityKey, modelTargetKey } from "./model-target.js";
 export {
   DEFAULT_SEARCH_ORIGIN,
   DEFAULT_SEARCH_RADIUS_KM,
@@ -13,6 +14,7 @@ export {
   SEARCH_TIMEZONE
 } from "./types.js";
 export type {
+  VehicleModelTarget,
   ConstraintStrength,
   FuelType,
   NationwideSearchLocation,

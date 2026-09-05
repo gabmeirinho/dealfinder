@@ -3,6 +3,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { DatabaseConnection } from "@dealfinder/db";
 import {
   ACTIVE_SEARCH_SOFT_LIMIT,
+  assertValidVehicleSearch,
+  modelTargetKey,
   SearchValidationError,
   type SearchValidationIssue,
   type VehicleSearch,
@@ -82,6 +84,34 @@ export async function handleSearchesRequest(
         ))
       };
       sendJson(response, 200, body);
+      return true;
+    }
+
+    if (segments.length === 3 && segments[2] === "models") {
+      if (method !== "POST") throw methodNotAllowed("POST");
+      const payload = await readObjectBody(request);
+      if (!Array.isArray(payload.searches) || payload.searches.length < 1 || payload.searches.length > 20) {
+        throw invalidRequest([{ path: "models", message: "add between 1 and 20 model targets" }]);
+      }
+      const drafts = payload.searches.map((item, index) => {
+        try {
+          if (!isRecord(item)) throw invalidRequest([{ path: "models", message: "each target must be a search" }]);
+          const draft = assertValidVehicleSearch(parseSearchDraft(item));
+          if (draft.criteria.modelTarget == null) throw new SearchValidationError([{ path: "criteria.modelTarget", message: "an explicit model target is required" }]);
+          return draft;
+        } catch (error) {
+          if (error instanceof SearchValidationError) throw new SearchValidationError(error.issues.map((issue) => ({ ...issue, path: `models.${index}.${issue.path}` })));
+          throw error;
+        }
+      });
+      const keys = drafts.map((draft) => modelTargetKey(draft.criteria.modelTarget!.value));
+      if (new Set(keys).size !== keys.length) throw invalidRequest([{ path: "models", message: "remove duplicate make/model/variant targets" }]);
+      const override = parseOverride(payload);
+      const searches = database.transaction(() => drafts.map((draft) => {
+        requireActivationConfirmation(database, draft.active, override);
+        return database.searches.create(draft);
+      }));
+      sendJson(response, 201, { searches: searches.map((search) => presentSearch(search, undefined, undefined)) });
       return true;
     }
 
@@ -367,6 +397,12 @@ function validateCriteriaShape(
   criteria: Readonly<Record<string, unknown>>,
   issues: SearchValidationIssue[]
 ): void {
+  if (criteria.modelTarget != null) {
+    const target = criteria.modelTarget;
+    if (!isRecord(target) || !isRecord(target.value) || typeof target.strength !== "string" || typeof target.value.make !== "string" || typeof target.value.model !== "string" || (target.value.variant !== null && typeof target.value.variant !== "string")) {
+      issue(issues, "criteria.modelTarget", "must contain a make, model, optional variant and hard strength");
+    }
+  }
   const keywordFields = [
     "makeKeywords",
     "modelKeywords",

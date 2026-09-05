@@ -1,3 +1,4 @@
+import { canonicalMake, identityKey } from "../searches/model-target.js";
 import { MINIMUM_COMPARABLES, type ComparableCohort, type ComparableListingInput } from "./types.js";
 import type { VehicleEnrichment } from "../enrichment/index.js";
 
@@ -77,8 +78,9 @@ function isComparable(subject: VehicleEnrichment, candidate: ComparableListingIn
       candidate.enrichment.indicators.monthlyPayment || candidate.enrichment.indicators.deposit) {
     return false;
   }
-  return fold(other.make) === fold(target.make) &&
-    fold(other.model) === fold(target.model) &&
+  return other.make !== null && target.make !== null && other.model !== null && target.model !== null &&
+    identityKey(canonicalMake(other.make)) === identityKey(canonicalMake(target.make)) &&
+    identityKey(other.model) === identityKey(target.model) &&
     compatibleVariant(target.variant, other.variant) &&
     other.year !== null && target.year !== null && Math.abs(other.year - target.year) <= YEAR_BAND &&
     other.mileageKm !== null && target.mileageKm !== null &&

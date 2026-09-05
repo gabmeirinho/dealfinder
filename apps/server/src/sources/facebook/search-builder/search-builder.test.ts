@@ -9,6 +9,17 @@ import {
 import { buildFacebookVehicleSearch } from "./index.js";
 
 describe("Facebook vehicle search builder", () => {
+  it("builds a distinct query and budget for each explicit model target", () => {
+    const urls = ["Golf", "Polo"].map((model, index) => {
+      const draft = createVehicleSearchDraft(model);
+      draft.criteria.modelTarget = { strength: "hard", value: { make: "Volkswagen", model, variant: null } };
+      draft.criteria.priceRange = { strength: "hard", value: { minimumEur: null, maximumEur: 15000 + index * 1000 } };
+      return new URL(buildFacebookVehicleSearch(asSearch(draft)).url);
+    });
+    expect(urls.map((url) => url.searchParams.get("query"))).toEqual(["Volkswagen Golf", "Volkswagen Polo"]);
+    expect(urls.map((url) => url.searchParams.get("maxPrice"))).toEqual(["15000", "16000"]);
+  });
+
   it("translates characterized keyword, price, year, and mileage filters", () => {
     const draft = completeDraft();
     const result = buildFacebookVehicleSearch(asSearch(draft));

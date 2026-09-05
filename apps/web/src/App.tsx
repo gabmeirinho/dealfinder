@@ -13,7 +13,7 @@ import { FacebookHealthPanel } from "./features/health/FacebookHealthPanel.js";
 import { ListingDashboard } from "./features/listings/ListingDashboard.js";
 import { fetchHealth } from "./health.js";
 import type { BrowserApiClient } from "./lib/api/browser.js";
-import type { SearchApiClient } from "./lib/api/searches.js";
+import { searchApi, type SearchApiClient } from "./lib/api/searches.js";
 import type { FacebookHealthApiClient } from "./lib/api/facebook-health.js";
 import type { ListingApiClient, ListingSummary } from "./lib/api/listings.js";
 
@@ -124,6 +124,8 @@ export function App({
           {...(searchesClient === undefined ? {} : { client: searchesClient })}
           {...(initialSearches === undefined ? {} : { initialSearches })}
         /></> : <ListingDashboard
+          searchesClient={searchesClient ?? searchApi}
+          {...(initialSearches === undefined ? {} : { initialSearches })}
           {...(listingsClient === undefined ? {} : { client: listingsClient })}
           {...(initialListings === undefined ? {} : { initialListings })}
         />}

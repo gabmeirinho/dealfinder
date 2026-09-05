@@ -31,6 +31,8 @@ import {
 } from "../../lib/api/searches.js";
 import {
   createSearchForm,
+  emptyModelTarget,
+  modelFormsToDrafts,
   draftToSearchForm,
   searchFormToDraft,
   type SearchFormModel
@@ -132,12 +134,12 @@ export function SearchDashboard({
 
   const activeCount = searches.filter(({ active }) => active).length;
 
-  const openCreate = (): void => {
+  const openCreate = (models = false): void => {
     setNotice(null);
     setEditor({
       mode: "create",
       searchId: null,
-      form: createSearchForm(searches.length + 1),
+      form: { ...createSearchForm(searches.length + 1), modelTargets: models ? [emptyModelTarget()] : [] },
       fieldErrors: {}
     });
   };
@@ -157,6 +159,14 @@ export function SearchDashboard({
     setPending(true);
     setError(null);
     try {
+      if (editor.mode === "create" && editor.form.modelTargets.length > 0) {
+        const saved = await client.createModels(modelFormsToDrafts(editor.form), overrideActiveLimit);
+        setSearches((current) => sortSearches([...current, ...saved]));
+        setEditor(null);
+        setConfirmation(null);
+        setNotice(`${saved.length} model target${saved.length === 1 ? "" : "s"} created. Verify each target in Facebook before scanning.`);
+        return;
+      }
       const draft = searchFormToDraft(editor.form);
       const saved = editor.mode === "create"
         ? await client.create(draft, overrideActiveLimit)
@@ -352,12 +362,17 @@ export function SearchDashboard({
       <div className="search-heading">
         <div>
           <h1 id="searches-title">Saved searches</h1>
-          <p>Define the vehicle once. Every marketplace adapter will work from the same rules.</p>
+          <p>Watch multiple models with separate queries and filters. All results arrive in one inbox.</p>
         </div>
-        <button className="primary-action" type="button" onClick={openCreate} disabled={pending}>
+        <div className="search-create-actions">
+        <button className="primary-action" type="button" onClick={() => openCreate(true)} disabled={pending}>
+          <Icon name="plus" /> Add models
+        </button>
+        <button className="row-action-primary" type="button" onClick={() => openCreate()} disabled={pending}>
           <Icon name="plus" />
           New search
         </button>
+        </div>
       </div>
 
       <div className="search-register" aria-label="Search capacity">
@@ -389,7 +404,7 @@ export function SearchDashboard({
           <div>
             <h2>Set your first search</h2>
             <p>Start with a make or model, then decide which rules are strict and which are preferences.</p>
-            <button type="button" className="text-action" onClick={openCreate}>Create a saved search</button>
+            <button type="button" className="text-action" onClick={() => openCreate(true)}>Create a saved search</button>
           </div>
         </div>
       ) : (
@@ -491,6 +506,7 @@ function SearchRow(props: SearchRowProps): ReactElement {
         </div>
         <p className="criteria-summary">{summarizeCriteria(search)}</p>
         <div className="constraint-key" aria-label="Constraint summary">
+          <span>{search.criteria.modelTarget ? "Model target" : "Keyword search"}</span>
           <span><i className="hard-key" />{countStrength(search, "hard")} hard</span>
           <span><i className="soft-key" />{countStrength(search, "soft")} soft</span>
         </div>
@@ -565,7 +581,7 @@ export function SearchEditor({ editor, pending, active, onChange, onClose, onSav
       <div className="editor-scrim" onClick={onClose} aria-hidden="true" />
       <aside ref={dialogRef} className="editor-sheet" role="dialog" aria-modal={active} aria-hidden={!active} aria-labelledby="editor-title">
         <header className="editor-header">
-          <h2 id="editor-title">{editor.mode === "create" ? "Create saved search" : `Edit ${form.name}`}</h2>
+          <h2 id="editor-title">{editor.mode === "create" ? (form.modelTargets.length > 0 ? "Add model targets" : "Create saved search") : `Edit ${form.name}`}</h2>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Close search editor">
             <Icon name="close" />
           </button>
@@ -574,7 +590,7 @@ export function SearchEditor({ editor, pending, active, onChange, onClose, onSav
         <form onSubmit={submit} noValidate>
           <FormSection title="Identity" description="Name the search and choose where it sits in the scan order.">
             <div className="field-grid two-column">
-              <TextField id="search-name" label="Search name" value={form.name} onChange={(value) => update("name", value)} errors={errorsFor(fieldErrors, "name")} autoFocus />
+              <TextField id="search-name" label={editor.mode === "create" && form.modelTargets.length > 0 ? "Group name (optional)" : "Search name"} value={form.name} onChange={(value) => update("name", value)} errors={errorsFor(fieldErrors, "name")} autoFocus />
               <TextField id="search-priority" label="Priority" value={form.priority} onChange={(value) => update("priority", value)} errors={errorsFor(fieldErrors, "priority")} type="number" min="1" max="1000" />
             </div>
             <label className="switch-field">
@@ -584,11 +600,33 @@ export function SearchEditor({ editor, pending, active, onChange, onClose, onSav
             </label>
           </FormSection>
 
-          <FormSection title="Vehicle identity" description="Comma-separate alternatives. A hard rule excludes mismatches; a soft rule improves ranking.">
+          {form.modelTargets.length > 0 ? (
+            <FormSection title="Model targets" description="One make and model per target. Shared filters below are copied into each search; edit each independently later.">
+              <FieldErrors id="models-error" errors={Object.entries(fieldErrors).filter(([key]) => key.startsWith("models") || key.startsWith("criteria.modelTarget")).flatMap(([key, messages]) => messages.map((message) => `${key.match(/^models\.(\d+)/) ? `Target ${Number(key.split(".")[1]) + 1}: ` : ""}${message}`))} />
+              {form.modelTargets.map((target, index) => {
+                const change = (key: keyof typeof target, value: string): void => update("modelTargets", form.modelTargets.map((item, position) => position === index ? { ...item, [key]: value } : item));
+                return <fieldset key={index} className="model-target-fields">
+                  <legend>Target {index + 1}</legend>
+                  <div className="field-grid two-column">
+                    <TextField id={`target-${index}-make`} label="Make" value={target.make} onChange={(value) => change("make", value)} errors={[]} placeholder="Volkswagen" />
+                    <TextField id={`target-${index}-model`} label="Model" value={target.model} onChange={(value) => change("model", value)} errors={[]} placeholder="Golf" />
+                    <TextField id={`target-${index}-variant`} label="Variant (optional)" value={target.variant} onChange={(value) => change("variant", value)} errors={[]} placeholder="GTE" />
+                  </div>
+                  {editor.mode === "create" ? <details><summary>Override shared budget, year or mileage</summary><div className="field-grid two-column">
+                    <TextField id={`target-${index}-budget`} label="Maximum EUR override" value={target.maximumPriceEur} onChange={(value) => change("maximumPriceEur", value)} errors={[]} type="number" min="0" placeholder="Use shared filter" />
+                    <TextField id={`target-${index}-year`} label="Minimum year override" value={target.minimumYear} onChange={(value) => change("minimumYear", value)} errors={[]} type="number" min="1886" placeholder="Use shared filter" />
+                    <TextField id={`target-${index}-mileage`} label="Maximum mileage override" value={target.maximumMileageKm} onChange={(value) => change("maximumMileageKm", value)} errors={[]} type="number" min="0" placeholder="Use shared filter" />
+                  </div></details> : null}
+                  {form.modelTargets.length > 1 ? <button className="text-action" type="button" onClick={() => update("modelTargets", form.modelTargets.filter((_, position) => position !== index))}>Remove target {index + 1}</button> : null}
+                </fieldset>;
+              })}
+              {editor.mode === "create" ? <button className="secondary-action" type="button" disabled={pending || form.modelTargets.length >= 20} onClick={() => update("modelTargets", [...form.modelTargets, emptyModelTarget()])}>Add another model</button> : null}
+            </FormSection>
+          ) : <FormSection title="Vehicle identity" description="Comma-separate alternatives. A hard rule excludes mismatches; a soft rule improves ranking.">
             <ConstraintTextField id="make-keywords" label="Make keywords" value={form.makeKeywords} strength={form.makeStrength} placeholder="Volkswagen, VW" onValue={(value) => update("makeKeywords", value)} onStrength={(value) => update("makeStrength", value)} errors={errorsFor(fieldErrors, "criteria.makeKeywords", "criteria.makeKeywords.value")} />
             <ConstraintTextField id="model-keywords" label="Model keywords" value={form.modelKeywords} strength={form.modelStrength} placeholder="Golf" onValue={(value) => update("modelKeywords", value)} onStrength={(value) => update("modelStrength", value)} errors={errorsFor(fieldErrors, "criteria.modelKeywords", "criteria.modelKeywords.value")} />
             <ConstraintTextField id="variant-keywords" label="Variant keywords" value={form.variantKeywords} strength={form.variantStrength} placeholder="GTE, GTI" onValue={(value) => update("variantKeywords", value)} onStrength={(value) => update("variantStrength", value)} errors={errorsFor(fieldErrors, "criteria.variantKeywords", "criteria.variantKeywords.value")} />
-          </FormSection>
+          </FormSection>}
 
           <FormSection title="Price and condition" description="Prices are whole EUR amounts; distance and mileage are kilometres.">
             <ConstraintPair
@@ -655,7 +693,7 @@ export function SearchEditor({ editor, pending, active, onChange, onClose, onSav
 
           <footer className="editor-actions">
             <button type="button" className="secondary-action" onClick={onClose} disabled={pending}>Cancel</button>
-            <button type="submit" className="primary-action" disabled={pending}>{pending ? "Saving…" : editor.mode === "create" ? "Create search" : "Save changes"}</button>
+            <button type="submit" className="primary-action" disabled={pending}>{pending ? "Saving…" : editor.mode === "create" ? (form.modelTargets.length > 0 ? `Create ${form.modelTargets.length} model target${form.modelTargets.length === 1 ? "" : "s"}` : "Create search") : "Save changes"}</button>
           </footer>
         </form>
       </aside>
@@ -815,7 +853,7 @@ function sortSearches(searches: readonly ManagedVehicleSearch[]): ManagedVehicle
 
 function summarizeCriteria(search: ManagedVehicleSearch): string {
   const criteria = search.criteria;
-  const identity = [
+  const identity = criteria.modelTarget ? [criteria.modelTarget.value.make, criteria.modelTarget.value.model, criteria.modelTarget.value.variant].filter(Boolean).join(" ") : [
     criteria.makeKeywords?.value.join(" / "),
     criteria.modelKeywords?.value.join(" / "),
     criteria.variantKeywords?.value.join(" / ")

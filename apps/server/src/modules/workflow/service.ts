@@ -49,7 +49,9 @@ export class ListingReviewService {
     conditions.push(`EXISTS (
       SELECT 1 FROM listing_match_evaluations visible_match
       WHERE visible_match.listing_id = listings.id AND visible_match.match_status <> 'excluded'
+        ${filters.searchId === undefined ? "" : "AND visible_match.search_id = ?"}
     )`);
+    if (filters.searchId !== undefined) parameters.push(filters.searchId);
     if (filters.query !== undefined && filters.query.trim() !== "") {
       conditions.push("(listings.title LIKE ? OR facts.make LIKE ? OR facts.model LIKE ?)");
       const query = `%${filters.query.trim().slice(0, 100).replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
@@ -59,7 +61,8 @@ export class ListingReviewService {
       filters.sort === "personal_fit" ? "personal_fit_percent" :
       filters.sort === "confidence" ? "CASE confidence WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END" : null;
     const ranking = order === null ? "" :
-      `(SELECT MAX(${order}) FROM listing_deal_scores scores WHERE scores.listing_id = listings.id) DESC,`;
+      `(SELECT MAX(${order}) FROM listing_deal_scores scores WHERE scores.listing_id = listings.id ${filters.searchId === undefined ? "" : "AND scores.search_id = ?"}) DESC,`;
+    if (order !== null && filters.searchId !== undefined) parameters.push(filters.searchId);
     const rows = database.database.prepare(`
       SELECT listings.id
       FROM listings
@@ -72,7 +75,7 @@ export class ListingReviewService {
                listings.last_seen_at DESC, listings.id DESC
       LIMIT 250
     `).all(...parameters) as unknown as Array<{ id: number }>;
-    return rows.map(({ id }) => this.summary(id, filters.sort));
+    return rows.map(({ id }) => this.summary(id, filters.sort, filters.searchId));
   }
 
   public detail(listingId: number): Record<string, unknown> | undefined {
@@ -183,7 +186,7 @@ export class ListingReviewService {
       : this.corrections.rejectRule(proposalId, decidedAt);
   }
 
-  private summary(listingId: number, sort: ListingInboxFilters["sort"] = "recent"): Record<string, unknown> {
+  private summary(listingId: number, sort: ListingInboxFilters["sort"] = "recent", filterSearchId?: string): Record<string, unknown> {
     const database = this.database();
     const listing = database.listings.get(listingId);
     const review = database.listingReviews.get(listingId);
@@ -192,7 +195,7 @@ export class ListingReviewService {
     const effective = stored === undefined
       ? null
       : applyFactCorrections(stored.facts, database.corrections.listForListing(listingId));
-    const searchIds = database.listings.listSearchIds(listingId);
+    const searchIds = database.listings.listSearchIds(listingId).filter((id) => filterSearchId === undefined || id === filterSearchId);
     const matches = searchIds.map((searchId) => database.normalizedVehicles.getMatch(listingId, searchId));
     const matchStatus = matches.some((match) => match?.status === "matches") ? "matches" :
       matches.some((match) => match?.status === "needs_information") ? "needs_information" : "excluded";

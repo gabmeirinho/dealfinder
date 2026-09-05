@@ -11,6 +11,9 @@ import {
   type VehicleFacts
 } from "../../lib/api/listings.js";
 
+import type { ManagedVehicleSearch } from "@dealfinder/domain";
+import type { SearchApiClient } from "../../lib/api/searches.js";
+
 const WORKFLOW: ReadonlyArray<{ value: ListingReviewState; label: string }> = [
   { value: "new", label: "New" },
   { value: "shortlisted", label: "Shortlisted" },
@@ -22,10 +25,13 @@ const WORKFLOW: ReadonlyArray<{ value: ListingReviewState; label: string }> = [
 
 export interface ListingDashboardProps {
   client?: ListingApiClient;
+  searchesClient?: Pick<SearchApiClient, "list">;
+  initialSearches?: readonly ManagedVehicleSearch[];
   initialListings?: readonly ListingSummary[];
 }
 
 interface AppliedListingFilters {
+  searchId: string;
   state: ListingReviewState | "all";
   query: string;
   riskOnly: boolean;
@@ -35,8 +41,19 @@ interface AppliedListingFilters {
 
 export function ListingDashboard({
   client = listingApi,
+  searchesClient,
+  initialSearches,
   initialListings
 }: ListingDashboardProps): ReactElement {
+  const [searches, setSearches] = useState<readonly ManagedVehicleSearch[]>(initialSearches ?? []);
+  const [searchId, setSearchId] = useState("");
+  const [searchError, setSearchError] = useState(false);
+  useEffect(() => {
+    if (!searchesClient || initialSearches !== undefined) return;
+    let cancelled = false;
+    void searchesClient.list().then((items) => { if (!cancelled) setSearches(items); }).catch(() => { if (!cancelled) setSearchError(true); });
+    return () => { cancelled = true; };
+  }, [searchesClient, initialSearches]);
   const [listings, setListings] = useState<ListingSummary[]>([...(initialListings ?? [])]);
   const [selected, setSelected] = useState<ListingDetail | null>(null);
   const [state, setState] = useState<ListingReviewState | "all">("all");
@@ -45,6 +62,7 @@ export function ListingDashboard({
   const [sort, setSort] = useState<ListingSort>("recent");
   const [archived, setArchived] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState<AppliedListingFilters>({
+    searchId: "",
     state: "all",
     query: "",
     riskOnly: false,
@@ -62,6 +80,7 @@ export function ListingDashboard({
     setError(null);
     try {
       const next = await client.list({
+        ...(appliedFilters.searchId === "" ? {} : { searchId: appliedFilters.searchId }),
         ...(appliedFilters.state === "all" ? {} : { state: appliedFilters.state }),
         ...(appliedFilters.query === "" ? {} : { query: appliedFilters.query }),
         risk: appliedFilters.riskOnly,
@@ -117,8 +136,9 @@ export function ListingDashboard({
 
       <form className="listing-filters" onSubmit={(event) => {
         event.preventDefault();
-        setAppliedFilters({ state, query: query.trim(), riskOnly, archived, sort });
+        setAppliedFilters({ searchId, state, query: query.trim(), riskOnly, archived, sort });
       }}>
+        <label><span>Model / saved search</span><select value={searchId} onChange={(event) => setSearchId(event.target.value)}><option value="">All models and searches</option>{searches.map((search) => <option key={search.id} value={search.id}>{search.name}</option>)}</select></label>
         <label><span>Find a car</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Make, model, or listing text" /></label>
         <label><span>Workflow</span><select value={state} onChange={(event) => setState(event.target.value as ListingReviewState | "all")}><option value="all">All active states</option>{WORKFLOW.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
         <label className="review-check"><input type="checkbox" checked={riskOnly} onChange={(event) => setRiskOnly(event.target.checked)} /><span>High-risk only</span></label>
@@ -127,6 +147,7 @@ export function ListingDashboard({
         <button className="primary-action" type="submit">Apply filters</button>
       </form>
 
+      {searchError ? <p role="status">Model filters could not be loaded. Reload the page to try again.</p> : null}
       {error !== null ? <p className="review-error" role="alert">{error} <button type="button" onClick={() => void load()}>Try again</button></p> : null}
       {loading ? <p className="review-loading" aria-live="polite"><span />Loading reviewed listings</p> : null}
       {!loading && listings.length === 0 ? <div className="review-empty"><h2>No cars in this view</h2><p>Adjust the workflow or archive filters. New processed matches will appear here after a scan.</p></div> : null}

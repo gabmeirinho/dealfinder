@@ -28,12 +28,14 @@ export function buildFacebookVehicleSearch(search: VehicleSearch): FacebookSearc
   );
   const supportedFilters: string[] = [];
   const queryParts = uniqueKeywords([
+    ...(search.criteria.modelTarget == null ? [] : [search.criteria.modelTarget.value.make, search.criteria.modelTarget.value.model, ...(search.criteria.modelTarget.value.variant ? [search.criteria.modelTarget.value.variant] : [])]),
     ...(search.criteria.makeKeywords?.value ?? []),
     ...(search.criteria.modelKeywords?.value ?? []),
     ...(search.criteria.variantKeywords?.value ?? []),
     ...(search.criteria.requiredKeywords?.value ?? [])
   ]);
 
+  if (search.criteria.modelTarget != null) supportedFilters.push("criteria.modelTarget");
   if (queryParts.length > 0) {
     url.searchParams.set("query", queryParts.join(" "));
     for (const field of [

@@ -3,6 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { createVehicleSearchDraft, type ManagedVehicleSearch } from "@dealfinder/domain";
 import { ListingDashboard } from "./ListingDashboard.js";
 import type { ListingApiClient, ListingDetail } from "../../lib/api/listings.js";
 
@@ -33,6 +34,19 @@ const detail: ListingDetail = {
 };
 
 describe("listing review dashboard", () => {
+  it("filters the shared inbox by the selected saved model target", async () => {
+    const client = mockClient();
+    const search = { ...createVehicleSearchDraft("SEAT Leon"), id: "leon", createdAt: "", updatedAt: "", lastScanAt: null, nextScanAt: null, sourceVerification: { state: "unverified", verifiedAt: null } } as ManagedVehicleSearch;
+    render(<ListingDashboard client={client} initialListings={[detail]} initialSearches={[search]} />);
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Model / saved search"), "leon");
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(client.list).toHaveBeenCalledWith({ searchId: "leon", risk: false, archived: false });
+    await user.selectOptions(screen.getByLabelText("Model / saved search"), "");
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(client.list).toHaveBeenLastCalledWith({ risk: false, archived: false });
+  });
+
   it("requests the selected assessment dimension when applying filters", async () => {
     const client = mockClient();
     render(<ListingDashboard client={client} initialListings={[detail]} />);

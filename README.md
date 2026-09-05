@@ -4,6 +4,23 @@ Dealfinder is a local-first workspace for collecting and reviewing deals.
 Version one is intended to run natively and manually on the host machine; Docker
 is not part of the supported development workflow.
 
+## Watching multiple models
+
+Use **Add models** in Saved searches to enter one make/model pair per target,
+with an optional required variant. Add up to 20 targets at once; shared filters
+are copied into each search, with optional maximum price, minimum year and mileage
+overrides. Blank overrides inherit the shared filter at creation time. Each target
+then has its own editable filters, priority, verification and scan schedule.
+Verify each target in Facebook before scanning. The existing ten-active-search
+confirmation applies to the whole batch, which saves all targets or none.
+
+Results share one inbox. Use **Model / saved search** to review one target and its
+assessment, or leave **All models and searches** selected. Valuation cohorts remain
+separate by vehicle make/model. Model targets compare model identities rather than
+substrings; case, accents, punctuation and common make aliases such as VW are
+normalized. Custom model names are supported, but there is no exhaustive model or
+trim alias catalog. Existing keyword searches remain available through **New search**.
+
 ## Requirements
 
 - Node.js 22.5 or newer (for the built-in `node:sqlite` module)
