@@ -73,6 +73,7 @@ export interface VehicleSearchCriteria {
 }
 
 export interface VehicleSearchDraft {
+  scanLimits?: import("../scanning/types.js").ScanLimits;
   name: string;
   priority: number;
   active: boolean;

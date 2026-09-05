@@ -2,6 +2,7 @@ import type { DatabaseConnection } from "@dealfinder/db";
 import {
   SCAN_INTERVAL_MAX_MINUTES,
   SCAN_INTERVAL_MINUTES,
+  type ScanMode,
   type ScanQueueReceipt,
   type ScanRun,
   type VehicleSearch
@@ -13,7 +14,7 @@ import type { FacebookScanResult } from "../../sources/facebook/scanner/index.js
 const MINUTE_MS = 60_000;
 
 export interface ScheduledScanner {
-  scan(searchId: string): Promise<FacebookScanResult>;
+  scan(searchId: string, mode?: ScanMode): Promise<FacebookScanResult>;
 }
 
 export interface SchedulerClock {
@@ -65,9 +66,9 @@ export class ScanScheduler {
     await this.#worker;
   }
 
-  public requestScan(searchId: string): ScanQueueReceipt {
+  public requestScan(searchId: string, mode: ScanMode = "standard"): ScanQueueReceipt {
     const requestedAt = this.#clock.now().toISOString();
-    const run = this.#database().scanRuns.enqueue(searchId, "manual", requestedAt);
+    const run = this.#database().scanRuns.enqueue(searchId, "manual", requestedAt, mode);
     if (this.#running) this.kickWorker();
     return receipt(run);
   }
@@ -146,13 +147,14 @@ export class ScanScheduler {
 
       database.scanRuns.markRunning(queued.id, completedAt());
       try {
-        const result = await this.#scanner.scan(search.id);
+        const result = await this.#scanner.scan(search.id, queued.mode ?? "standard");
         const finishedAt = completedAt();
         if (database.scanRuns.get(queued.id) === undefined) continue;
         database.transaction(() => {
           database.scanRuns.complete({
             runId: queued.id,
             completedAt: finishedAt,
+            stopReason: result.stopReason,
             cardsSeen: result.cardsSeen,
             newCandidates: result.newCandidates
           });

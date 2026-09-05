@@ -6,6 +6,7 @@ import {
   assertValidVehicleSearch,
   modelTargetKey,
   SearchValidationError,
+  type ScanMode,
   type SearchValidationIssue,
   type VehicleSearch,
   type VehicleSearchDraft
@@ -27,7 +28,7 @@ export interface SearchHttpOptions {
   database: () => DatabaseConnection;
   now?: () => Date;
   scanQueue?: {
-    requestScan(searchId: string): SearchScanRequestResponse;
+    requestScan(searchId: string, mode?: ScanMode): SearchScanRequestResponse;
   };
 }
 
@@ -188,6 +189,9 @@ export async function handleSearchesRequest(
     }
 
     if (action === "scan") {
+      const payload = await readOptionalObjectBody(request);
+      const mode = payload.mode ?? "standard";
+      if (mode !== "standard" && mode !== "deep") throw invalidRequest([{ path: "mode", message: "must be standard or deep" }]);
       const search = requireSearch(database, id);
       if (!search.active) {
         throw new SearchApiError(
@@ -217,8 +221,8 @@ export async function handleSearchesRequest(
         );
       }
       const requestedAt = now().toISOString();
-      const run = options.scanQueue?.requestScan(search.id) ??
-        database.scanRuns.enqueue(search.id, "manual", requestedAt);
+      const run = options.scanQueue?.requestScan(search.id, mode) ??
+        database.scanRuns.enqueue(search.id, "manual", requestedAt, mode);
       const body: SearchScanRequestResponse = "status" in run
         ? run
         : {
@@ -336,6 +340,7 @@ function toDraft(search: VehicleSearch): VehicleSearchDraft {
     name: search.name,
     priority: search.priority,
     active: search.active,
+    ...(search.scanLimits === undefined ? {} : { scanLimits: search.scanLimits }),
     criteria: search.criteria,
     location: search.location
   };

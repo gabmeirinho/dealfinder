@@ -1,5 +1,6 @@
 import {
   createVehicleSearchDraft,
+  DEFAULT_SCAN_LIMITS,
   type ConstraintStrength,
   type FuelType,
   type ManagedVehicleSearch,
@@ -23,6 +24,10 @@ export function emptyModelTarget(): ModelTargetForm {
 }
 
 export interface SearchFormModel {
+  initialCardLimit: string;
+  knownListingStopCount: string;
+  maxCards: string;
+  maxDurationSeconds: string;
   modelTargets: ModelTargetForm[];
   name: string;
   priority: string;
@@ -68,7 +73,12 @@ export function draftToSearchForm(
   search: VehicleSearchDraft | ManagedVehicleSearch
 ): SearchFormModel {
   const criteria = search.criteria;
+  const limits = search.scanLimits ?? DEFAULT_SCAN_LIMITS;
   return {
+    initialCardLimit: String(limits.initialCardLimit),
+    knownListingStopCount: String(limits.knownListingStopCount),
+    maxCards: String(limits.maxCards),
+    maxDurationSeconds: String(limits.maxDurationSeconds),
     modelTargets: criteria.modelTarget == null ? [] : [{ ...emptyModelTarget(), ...criteria.modelTarget.value, variant: criteria.modelTarget.value.variant ?? "" }],
     name: search.name,
     priority: String(search.priority),
@@ -108,6 +118,7 @@ export function searchFormToDraft(form: SearchFormModel): VehicleSearchDraft {
   const minimumPriceEur = numberOrNull(form.minimumPriceEur);
   const maximumPriceEur = numberOrNull(form.maximumPriceEur);
   return {
+    scanLimits: { initialCardLimit: Number(form.initialCardLimit), knownListingStopCount: Number(form.knownListingStopCount), maxCards: Number(form.maxCards), maxDurationSeconds: Number(form.maxDurationSeconds) },
     name: form.name,
     priority: Number(form.priority),
     active: form.active,

@@ -10,7 +10,9 @@ describe("incomplete listing migration", () => {
     try {
       const draft = createVehicleSearchDraft("Existing search");
       draft.criteria.makeKeywords = { value: ["Volkswagen"], strength: "hard" };
-      const search = database.searches.create(draft);
+      const search = { id: "legacy-search" };
+    database.database.prepare(`INSERT INTO searches (id, name, priority, is_active, criteria_json, location_mode, origin, radius_km, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(search.id, draft.name, draft.priority, draft.active ? 1 : 0, JSON.stringify(draft.criteria), draft.location.mode, draft.location.origin, draft.location.radiusKm, "2026-08-19T00:00:00.000Z", "2026-08-19T00:00:00.000Z");
       const at = "2026-09-05T10:00:00.000Z";
       const unknown = { criterion: "fuels", matched: null, explanation: "fuel is unknown" };
       const failure = { criterion: "minimumYear", matched: false, explanation: "year normalized as 2000" };
@@ -46,7 +48,7 @@ describe("incomplete listing migration", () => {
       database.database.prepare("UPDATE processing_queue SET state = 'completed' WHERE listing_id = ?")
         .run(ids[4]!);
 
-      expect(runMigrations(database.database, allMigrations).appliedVersions).toEqual([20, 21]);
+      expect(runMigrations(database.database, allMigrations).appliedVersions).toEqual([20, 21, 22]);
       expect(database.normalizedVehicles.getMatch(ids[0]!, search.id)).toMatchObject({
         status: "needs_information", eligible: false, hardFailures: [], missingCriteria: [unknown]
       });
