@@ -86,7 +86,7 @@ export class ListingDetailCaptureAttemptsRepository {
       JOIN listing_match_evaluations matches
         ON matches.listing_id = listings.id
        AND matches.search_id = links.search_id
-       AND matches.eligible = 1
+       AND matches.match_status <> 'excluded'
       LEFT JOIN listing_detail_facts details ON details.listing_id = listings.id
       LEFT JOIN listing_detail_capture_attempts attempts ON attempts.listing_id = listings.id
       WHERE listings.source = 'facebook'
@@ -98,7 +98,8 @@ export class ListingDetailCaptureAttemptsRepository {
         AND (details.listing_id IS NULL OR details.captured_at < ?)
         AND (attempts.listing_id IS NULL OR attempts.next_attempt_at <= ?)
         AND (attempts.state IS NULL OR attempts.state <> 'processing')
-      ORDER BY COALESCE((
+      ORDER BY CASE WHEN matches.match_status = 'needs_information' THEN 0 ELSE 1 END,
+      COALESCE((
         SELECT MAX(scores.total_score)
         FROM listing_deal_scores scores
         WHERE scores.listing_id = listings.id AND scores.search_id = links.search_id

@@ -47,6 +47,8 @@ interface MatchRow {
   listing_id: number;
   search_id: string;
   eligible: number;
+  match_status: VehicleMatchEvaluation["status"];
+  missing_criteria_json: string;
   hard_failures_json: string;
   soft_contributions_json: string;
   evaluated_at: string;
@@ -201,11 +203,13 @@ export class NormalizedVehiclesRepository {
     validateTimestamp(evaluatedAt, "Evaluated at");
     this.database.prepare(`
       INSERT INTO listing_match_evaluations (
-        listing_id, search_id, eligible, hard_failures_json,
+        listing_id, search_id, eligible, match_status, missing_criteria_json, hard_failures_json,
         soft_contributions_json, evaluated_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(listing_id, search_id) DO UPDATE SET
         eligible = excluded.eligible,
+        match_status = excluded.match_status,
+        missing_criteria_json = excluded.missing_criteria_json,
         hard_failures_json = excluded.hard_failures_json,
         soft_contributions_json = excluded.soft_contributions_json,
         evaluated_at = excluded.evaluated_at
@@ -213,6 +217,8 @@ export class NormalizedVehiclesRepository {
       listingId,
       searchId,
       bool(evaluation.eligible),
+      evaluation.status,
+      JSON.stringify(evaluation.missingCriteria),
       JSON.stringify(evaluation.hardFailures),
       JSON.stringify(evaluation.softContributions),
       evaluatedAt
@@ -222,7 +228,7 @@ export class NormalizedVehiclesRepository {
 
   public getMatch(listingId: number, searchId: string): StoredMatchEvaluation | undefined {
     const row = this.database.prepare(`
-      SELECT listing_id, search_id, eligible, hard_failures_json,
+      SELECT listing_id, search_id, eligible, match_status, missing_criteria_json, hard_failures_json,
              soft_contributions_json, evaluated_at
       FROM listing_match_evaluations WHERE listing_id = ? AND search_id = ?
     `).get(listingId, searchId) as unknown as MatchRow | undefined;
@@ -231,6 +237,8 @@ export class NormalizedVehiclesRepository {
       listingId: row.listing_id,
       searchId: row.search_id,
       eligible: row.eligible === 1,
+      status: row.match_status,
+      missingCriteria: parseArray(row.missing_criteria_json, "missing criteria"),
       hardFailures: parseArray(row.hard_failures_json, "hard filter failures"),
       softContributions: parseArray(row.soft_contributions_json, "soft contributions"),
       evaluatedAt: row.evaluated_at

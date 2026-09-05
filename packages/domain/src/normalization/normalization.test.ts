@@ -52,6 +52,51 @@ describe("vehicle normalization", () => {
     });
   });
 
+  it.each([
+    {
+      title: "SEAT Ibiza 1.4 TDI Reference 2016",
+      model: "Ibiza",
+      variant: "1.4 TDI Reference"
+    },
+    {
+      title: "Seat León ST FR 1.5 TSI 2020",
+      model: "León",
+      variant: "ST FR 1.5 TSI"
+    }
+  ])("normalizes SEAT $model model and variant tokens", ({ title, model, variant }) => {
+    const facts = normalizeVehicleFacts({
+      title,
+      description: null,
+      displayedPrice: "12 500 €",
+      cardFacts: [],
+      referenceYear: 2026
+    });
+
+    expect(facts).toMatchObject({
+      make: "SEAT",
+      model,
+      variant
+    });
+  });
+
+  it("matches accented SEAT model names against unaccented hard search keywords", () => {
+    const facts = normalizeVehicleFacts({
+      title: "Seat León ST FR 1.5 TSI 2020",
+      description: null,
+      displayedPrice: "18 900 €",
+      cardFacts: [],
+      referenceYear: 2026
+    });
+    const criteria = createEmptySearchCriteria();
+    criteria.makeKeywords = { value: ["SEAT"], strength: "hard" };
+    criteria.modelKeywords = { value: ["Leon"], strength: "hard" };
+
+    expect(evaluateVehicleMatch(facts, criteria)).toMatchObject({
+      eligible: true,
+      hardFailures: []
+    });
+  });
+
   it("does not treat a labelled year as mileage when the description has both", () => {
     const facts = normalizeVehicleFacts({
       title: "Volkswagen Golf 2009",

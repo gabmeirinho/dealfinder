@@ -160,7 +160,8 @@ export class ListingIngestionService {
           match,
           input.observedAt
         );
-        if (match.eligible) {
+        if (!match.eligible) database.dealScores.delete(ingested.listing.id, input.searchId);
+        if (match.status !== "excluded") {
           database.enrichmentProcessing.enqueue(ingested.listing.id, input.observedAt);
         }
       }
