@@ -82,7 +82,73 @@ describe("Facebook listing detail parser", () => {
     });
   });
 
-  it("fails closed when the description is missing or contains contact data", () => {
+  it("accepts structured vehicle metadata when Facebook has no labelled description", () => {
+    const detail = parseFacebookListingDetail(`
+      <script>
+        {"vehicle_make_display_name":"Volkswagen",
+         "vehicle_model_display_name":"Golf",
+         "vehicle_fuel_type":"DIESEL"}
+      </script>
+    `);
+
+    expect(detail).toMatchObject({
+      contractVersion: 1,
+      description: null,
+      structuredFacts: { make: "Volkswagen", model: "Golf", fuel: "diesel" }
+    });
+  });
+
+  it("extracts listing facts and description from nested JSON payloads", () => {
+    const detail = parseFacebookListingDetail(`
+      <script type="application/json">
+        {"marketplace_listing": {
+          "description": "Viatura importada, com histórico de manutenção.",
+          "vehicle_year": 2014,
+          "vehicle_model": {"value": "Golf"},
+          "fuel_type": "Gasóleo",
+          "odometerData": {"unit": "MILES", "value": 100000},
+          "transmissionType": "DSG"
+        }}
+      </script>
+    `);
+
+    expect(detail).toMatchObject({
+      description: "Viatura importada, com histórico de manutenção.",
+      structuredFacts: {
+        year: 2014,
+        mileageKm: 160934,
+        model: "Golf",
+        fuel: "diesel",
+        transmission: "automatic"
+      }
+    });
+  });
+
+  it("extracts facts from executable Facebook-style objects with unquoted keys", () => {
+    const detail = parseFacebookListingDetail(`
+      <script>
+        window.__listing = { marketplace_listing: {
+          description: 'One owner, serviced regularly.',
+          vehicle_make: 'Volkswagen',
+          vehicle_model: 'Golf',
+          fuelType: 'PHEV',
+          vehicle_odometer_data: { unit: 'KILOMETERS', value: 88000 }
+        }};
+      </script>
+    `);
+
+    expect(detail).toMatchObject({
+      description: "One owner, serviced regularly.",
+      structuredFacts: {
+        make: "Volkswagen",
+        model: "Golf",
+        fuel: "plug_in_hybrid",
+        mileageKm: 88000
+      }
+    });
+  });
+
+  it("fails closed when both description and structured metadata are missing", () => {
     expect(() => parseFacebookListingDetail("<main><p>Vehicle details</p></main>"))
       .toThrow(FacebookDetailContractError);
     expect(() => parseFacebookListingDetail(

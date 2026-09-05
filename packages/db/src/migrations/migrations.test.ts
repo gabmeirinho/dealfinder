@@ -28,7 +28,7 @@ describe("database migrations", () => {
 
     expect(testDatabase.connection.migrationResult).toEqual({
       currentVersion: LATEST_SCHEMA_VERSION,
-      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     });
     const migrations = testDatabase.connection.database
       .prepare("SELECT version, name FROM schema_migrations ORDER BY version")
@@ -51,7 +51,8 @@ describe("database migrations", () => {
       { version: 15, name: "allow_cancelled_processing_queue" },
       { version: 16, name: "capture_listing_descriptions" },
       { version: 17, name: "listing_detail_descriptions" },
-      { version: 18, name: "listing_detail_facts" }
+      { version: 18, name: "listing_detail_facts" },
+      { version: 19, name: "listing_detail_capture_attempts" }
     ]);
   });
 
@@ -105,7 +106,7 @@ describe("database migrations", () => {
     });
 
     const result = runMigrations(database.database, allMigrations, () => new Date("2026-08-23"));
-    expect(result.appliedVersions).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
+    expect(result.appliedVersions).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
     const listing = database.database.prepare(`
       SELECT id, discovery_kind FROM listings WHERE source_listing_id = ?
     `).get("100000000000001") as unknown as { id: number; discovery_kind: string };
@@ -147,7 +148,7 @@ describe("database migrations", () => {
     database.enrichmentProcessing.enqueue(listing.id, "2026-08-23T09:00:00.000Z");
 
     expect(runMigrations(database.database, allMigrations, () => new Date("2026-08-23")))
-      .toEqual({ currentVersion: 18, appliedVersions: [15, 16, 17, 18] });
+      .toEqual({ currentVersion: 19, appliedVersions: [15, 16, 17, 18, 19] });
     expect(database.enrichmentProcessing.getQueueItem(listing.id)).toMatchObject({ state: "queued" });
 
     database.database.prepare(`

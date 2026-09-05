@@ -43,6 +43,7 @@ export interface FacebookScanBrowser {
 export interface FacebookScannerOptions {
   database: () => DatabaseConnection;
   browser: () => FacebookScanBrowser;
+  afterScan?: (searchId: string) => Promise<void>;
   now?: () => Date;
   failures?: {
     pause(
@@ -62,6 +63,7 @@ export interface FacebookScannerOptions {
 export class FacebookScanner {
   readonly #database: () => DatabaseConnection;
   readonly #browser: () => FacebookScanBrowser;
+  readonly #afterScan: ((searchId: string) => Promise<void>) | undefined;
   readonly #now: () => Date;
   readonly #failures: FacebookScannerOptions["failures"];
   readonly #geocodingProvider: GeocodingProvider | undefined;
@@ -71,6 +73,7 @@ export class FacebookScanner {
   public constructor(options: FacebookScannerOptions) {
     this.#database = options.database;
     this.#browser = options.browser;
+    this.#afterScan = options.afterScan;
     this.#now = options.now ?? (() => new Date());
     this.#failures = options.failures;
     this.#geocodingProvider = options.geocodingProvider;
@@ -218,6 +221,7 @@ export class FacebookScanner {
         calculatedAt: observedAt
       });
     }
+    await this.#afterScan?.(searchId);
     return result;
   }
 

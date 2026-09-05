@@ -1,5 +1,6 @@
 import type { DatabaseConnection, StoredDuplicateGroup, StoredEnrichment } from "@dealfinder/db";
 import {
+  applyAuthoritativeStructuredFacts,
   applyFactCorrections,
   createDuplicateTextTokens,
   createVehicleDuplicateFingerprint,
@@ -47,9 +48,12 @@ export class DuplicateDetectionService {
 
       const corrections = database.corrections.listForListing(listing.id);
       const facts = applyFactCorrections(normalized.facts, corrections);
-      const enrichment = resolveEnrichment(stored, facts, new Set(
-        corrections.map(({ field }) => field)
-      ));
+      const enrichment = resolveEnrichment(
+        stored,
+        facts,
+        new Set(corrections.map(({ field }) => field)),
+        database.listingDetailFacts.get(listing.id)?.structuredFacts
+      );
       const textTokens = createDuplicateTextTokens([
         facts.original.title,
         facts.original.description ?? "",
@@ -89,23 +93,10 @@ export class DuplicateDetectionService {
 function resolveEnrichment(
   stored: StoredEnrichment,
   facts: NormalizedVehicleFacts,
-  corrected: ReadonlySet<NormalizedFactField>
+  corrected: ReadonlySet<NormalizedFactField>,
+  structured: import("@dealfinder/domain").StructuredVehicleFacts | undefined
 ): VehicleEnrichment {
-  const choose = <T>(field: NormalizedFactField, ai: T | null, normalized: T | null): T | null =>
-    corrected.has(field) ? normalized : (ai ?? normalized);
-  return {
-    ...stored.enrichment,
-    vehicle: {
-      make: choose("make", stored.enrichment.vehicle.make, facts.make),
-      model: choose("model", stored.enrichment.vehicle.model, facts.model),
-      variant: choose("variant", stored.enrichment.vehicle.variant, facts.variant),
-      year: choose("year", stored.enrichment.vehicle.year, facts.year),
-      mileageKm: choose("mileageKm", stored.enrichment.vehicle.mileageKm, facts.mileageKm),
-      fuel: choose("fuel", stored.enrichment.vehicle.fuel, facts.fuel),
-      transmission: choose("transmission", stored.enrichment.vehicle.transmission, facts.transmission),
-      powerHp: choose("powerHp", stored.enrichment.vehicle.powerHp, facts.powerHp)
-    }
-  };
+  return applyAuthoritativeStructuredFacts(stored.enrichment, facts, structured, corrected);
 }
 
 function validateTimestamp(value: string): void {

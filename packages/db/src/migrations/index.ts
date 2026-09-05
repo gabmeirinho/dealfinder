@@ -16,6 +16,7 @@ import { allowCancelledProcessingQueueMigration } from "./015-allow-cancelled-pr
 import { captureListingDescriptionsMigration } from "./016-capture-listing-descriptions.js";
 import { listingDetailDescriptionsMigration } from "./017-listing-detail-descriptions.js";
 import { listingDetailFactsMigration } from "./018-listing-detail-facts.js";
+import { listingDetailCaptureAttemptsMigration } from "./019-listing-detail-capture-attempts.js";
 import type { Migration } from "./types.js";
 
 export const allMigrations: readonly Migration[] = [
@@ -36,7 +37,8 @@ export const allMigrations: readonly Migration[] = [
   allowCancelledProcessingQueueMigration,
   captureListingDescriptionsMigration,
   listingDetailDescriptionsMigration,
-  listingDetailFactsMigration
+  listingDetailFactsMigration,
+  listingDetailCaptureAttemptsMigration
 ];
 
 export const LATEST_SCHEMA_VERSION =

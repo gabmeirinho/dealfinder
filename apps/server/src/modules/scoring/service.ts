@@ -1,5 +1,6 @@
 import type { DatabaseConnection, StoredDealScore, StoredEnrichment } from "@dealfinder/db";
 import {
+  applyAuthoritativeStructuredFacts,
   applyFactCorrections,
   assessVehicleRisk,
   calculateDealScore,
@@ -7,6 +8,7 @@ import {
   type ComparableListingInput,
   type NormalizedFactField,
   type NormalizedVehicleFacts,
+  type StructuredVehicleFacts,
   type VehicleEnrichment,
   type VehicleRiskAssessment
 } from "@dealfinder/domain";
@@ -111,7 +113,12 @@ function resolveListing(
   const corrections = database.corrections.listForListing(stored.listingId);
   const corrected = new Set<NormalizedFactField>(corrections.map(({ field }) => field));
   const effective = applyFactCorrections(normalized.facts, corrections);
-  const enrichment = resolveEnrichment(stored.enrichment, effective, corrected);
+  const enrichment = resolveEnrichment(
+    stored.enrichment,
+    effective,
+    corrected,
+    database.listingDetailFacts.get(stored.listingId)?.structuredFacts
+  );
   const facts: NormalizedVehicleFacts = {
     ...effective,
     priceCents: enrichment.price.interpretation === "full_price"
@@ -139,22 +146,17 @@ function resolveListing(
 function resolveEnrichment(
   enrichment: VehicleEnrichment,
   facts: NormalizedVehicleFacts,
-  corrected: ReadonlySet<NormalizedFactField>
+  corrected: ReadonlySet<NormalizedFactField>,
+  structured: StructuredVehicleFacts | undefined
 ): VehicleEnrichment {
   const choose = <T>(field: NormalizedFactField, ai: T | null, normalized: T | null): T | null =>
     corrected.has(field) ? normalized : (ai ?? normalized);
   const priceCorrected = corrected.has("priceCents");
+  const sourceAware = applyAuthoritativeStructuredFacts(enrichment, facts, structured, corrected);
   return {
-    ...enrichment,
+    ...sourceAware,
     vehicle: {
-      make: choose("make", enrichment.vehicle.make, facts.make),
-      model: choose("model", enrichment.vehicle.model, facts.model),
-      variant: choose("variant", enrichment.vehicle.variant, facts.variant),
-      year: choose("year", enrichment.vehicle.year, facts.year),
-      mileageKm: choose("mileageKm", enrichment.vehicle.mileageKm, facts.mileageKm),
-      fuel: choose("fuel", enrichment.vehicle.fuel, facts.fuel),
-      transmission: choose("transmission", enrichment.vehicle.transmission, facts.transmission),
-      powerHp: choose("powerHp", enrichment.vehicle.powerHp, facts.powerHp)
+      ...sourceAware.vehicle
     },
     price: priceCorrected
       ? { amountCents: facts.priceCents, interpretation: facts.priceCents === null ? "unknown" : "full_price" }

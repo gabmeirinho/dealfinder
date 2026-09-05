@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { openDatabase, type DatabaseConnection } from "@dealfinder/db";
-import { createVehicleSearchDraft, type VehicleEnrichment } from "@dealfinder/domain";
+import { createVehicleSearchDraft, type FuelType, type VehicleEnrichment } from "@dealfinder/domain";
 
 import { CorrectionsService } from "../corrections/index.js";
 import { ListingIngestionService } from "../listings/index.js";
@@ -104,6 +104,39 @@ describe("deal scoring service", () => {
     expect(database.normalizedVehicles.getMatch(setup.listingIds[0]!, setup.searchId)?.eligible).toBe(false);
   });
 
+  it("uses Facebook structured vehicle facts before conflicting AI enrichment", () => {
+    const setup = seed([22_000], false, "petrol");
+    database = setup.database;
+    const listingId = setup.listingIds[0]!;
+    database.listingDetailFacts.save(
+      listingId,
+      {
+        year: 2020, mileageKm: 80_000, make: "BMW", model: "320d", variant: "M Sport",
+        fuel: "petrol", transmission: "automatic", powerHp: 190,
+        condition: null, listingCondition: null
+      },
+      {
+        year: null, mileageKm: null, make: null, model: null, variant: null,
+        fuel: null, transmission: null, powerHp: null
+      },
+      {
+        year: 2020, mileageKm: 80_000, make: "BMW", model: "320d", variant: "M Sport",
+        fuel: "petrol", transmission: "automatic", powerHp: 190
+      },
+      SCORED_AT
+    );
+
+    expect(database.listingDetailFacts.get(listingId)?.structuredFacts.fuel).toBe("petrol");
+
+    new DealScoringService({ database: () => setup.database }).recomputeAll(SCORED_AT);
+
+    expect(database.normalizedVehicles.getMatch(listingId, setup.searchId)).toMatchObject({
+      eligible: true,
+      hardFailures: []
+    });
+    expect(database.dealScores.get(listingId, setup.searchId)).toBeDefined();
+  });
+
   it("does not recompute downstream scores while credit processing is paused", () => {
     const setup = seed([22_000]);
     database = setup.database;
@@ -116,7 +149,7 @@ describe("deal scoring service", () => {
   });
 });
 
-function seed(pricesEur: number[], nationwide = false) {
+function seed(pricesEur: number[], nationwide = false, fuel?: FuelType) {
   const database = openDatabase({ filename: ":memory:" });
   const draft = createVehicleSearchDraft("BMW deals");
   draft.criteria.makeKeywords = { value: ["BMW"], strength: "hard" };
@@ -155,6 +188,15 @@ function seed(pricesEur: number[], nationwide = false) {
       SCORED_AT,
       null
     );
+  }
+  if (fuel !== undefined) {
+    database.searches.update(search.id, {
+      name: search.name,
+      priority: search.priority,
+      active: search.active,
+      criteria: { ...search.criteria, fuels: { value: [fuel], strength: "hard" } },
+      location: search.location
+    });
   }
   return { database, searchId: search.id, listingIds };
 }

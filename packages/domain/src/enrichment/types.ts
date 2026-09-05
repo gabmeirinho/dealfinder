@@ -15,6 +15,16 @@ export interface EnrichmentInput {
       source: "facebook_structured" | "description" | "card" | "none";
       conflict: boolean;
     };
+    structuredVehicle?: {
+      year: number | null;
+      mileageKm: number | null;
+      make: string | null;
+      model: string | null;
+      variant: string | null;
+      fuel: FuelType | null;
+      transmission: TransmissionType | null;
+      powerHp: number | null;
+    };
   };
   facts: {
     priceCents: number | null;

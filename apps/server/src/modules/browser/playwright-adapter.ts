@@ -97,14 +97,17 @@ class PlaywrightBrowserSession implements BrowserSession {
         const browser = globalThis as unknown as {
           document?: {
             body?: { innerText?: string };
+            documentElement?: { innerHTML?: string };
             querySelector(selector: string): unknown;
           };
         };
         const bodyText = browser.document?.body?.innerText ?? "";
+        const pageHtml = browser.document?.documentElement?.innerHTML ?? "";
         return /(?:description|seller description|description du vendeur|descrição do vendedor|descripción del vendedor)/iu.test(bodyText) ||
           (browser.document !== undefined && browser.document.querySelector(
             '[data-testid*="description" i], [data-ad-preview="message"], [data-ad-comet-preview="message"]'
-          ) !== null);
+          ) !== null) ||
+          /(?:vehicle_(?:fuel_type|make_display_name|model_display_name|trim_display_name|odometer_data|transmission_type|specifications)|(?:fuel_type|fuelType|vehicleYear|vehicleMake|vehicleModel|vehicleTrim|odometerData|transmissionType))/iu.test(pageHtml);
       }, { timeout: FACEBOOK_DETAIL_READY_TIMEOUT_MS }).catch(() => undefined);
       await this.expandListingDescription();
       await this.#controlledPage.waitForTimeout(500);

@@ -25,16 +25,29 @@ export interface ListingDetailCaptureServiceOptions {
 
 export interface ListingDetailCaptureResult {
   listingId: number;
-  description: string;
+  description: string | null;
   capturedAt: string;
   queuedForEnrichment: boolean;
 }
+
+export interface ListingDetailCaptureBatchResult {
+  searchId: string;
+  attempted: number;
+  succeeded: number;
+  failed: number;
+  blocked: boolean;
+}
+
+export const DETAIL_CAPTURE_BATCH_SIZE = 5 as const;
+const DETAIL_CAPTURE_SUCCESS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+const DETAIL_CAPTURE_FAILURE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 export class ListingDetailCaptureService {
   readonly #database: () => DatabaseConnection;
   readonly #browser: () => BrowserManager;
   readonly #processingWake: (() => void) | undefined;
   readonly #now: () => Date;
+  #captureTail: Promise<void> = Promise.resolve();
 
   public constructor(options: ListingDetailCaptureServiceOptions) {
     this.#database = options.database;
@@ -44,6 +57,96 @@ export class ListingDetailCaptureService {
   }
 
   public async capture(listingId: number): Promise<ListingDetailCaptureResult> {
+    return await this.withCaptureLock(() => this.captureWithAttempt(listingId));
+  }
+
+  /** Captures a small, ordered batch after a search scan without flooding Facebook. */
+  public async captureEligible(
+    searchId: string,
+    limit: number = DETAIL_CAPTURE_BATCH_SIZE
+  ): Promise<ListingDetailCaptureBatchResult> {
+    return await this.withCaptureLock(() => this.captureEligibleWithLock(searchId, limit));
+  }
+
+  private async captureEligibleWithLock(
+    searchId: string,
+    limit: number
+  ): Promise<ListingDetailCaptureBatchResult> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 25) {
+      throw new Error("Detail capture batch size must be an integer from 1 to 25");
+    }
+    const database = this.#database();
+    if (database.searches.get(searchId) === undefined) throw new Error(`Search not found: ${searchId}`);
+    const now = this.#now().toISOString();
+    database.listingDetailCaptureAttempts.recoverInterrupted(
+      now,
+      offsetTimestamp(now, DETAIL_CAPTURE_FAILURE_COOLDOWN_MS)
+    );
+    let attempted = 0;
+    let succeeded = 0;
+    let failed = 0;
+    let blocked = false;
+    while (attempted < limit) {
+      const at = this.#now().toISOString();
+      const listingId = database.listingDetailCaptureAttempts.findNextEligible(
+        searchId,
+        at,
+        offsetTimestamp(at, -DETAIL_CAPTURE_SUCCESS_COOLDOWN_MS)
+      );
+      if (listingId === undefined) break;
+      attempted += 1;
+      try {
+        await this.captureWithAttempt(listingId);
+        succeeded += 1;
+      } catch (error: unknown) {
+        failed += 1;
+        if (isBrowserUnavailable(error)) {
+          blocked = true;
+          break;
+        }
+      }
+    }
+    return { searchId, attempted, succeeded, failed, blocked };
+  }
+
+  private async captureWithAttempt(listingId: number): Promise<ListingDetailCaptureResult> {
+    const database = this.#database();
+    if (database.listings.get(listingId) === undefined) throw new Error(`Listing not found: ${listingId}`);
+    const attemptedAt = this.#now().toISOString();
+    database.listingDetailCaptureAttempts.begin(listingId, attemptedAt);
+    try {
+      const result = await this.captureListing(listingId);
+      database.listingDetailCaptureAttempts.completeSuccess(
+        listingId,
+        result.capturedAt,
+        offsetTimestamp(result.capturedAt, DETAIL_CAPTURE_SUCCESS_COOLDOWN_MS)
+      );
+      return result;
+    } catch (error: unknown) {
+      const completedAt = this.#now().toISOString();
+      database.listingDetailCaptureAttempts.completeFailure(
+        listingId,
+        completedAt,
+        offsetTimestamp(completedAt, DETAIL_CAPTURE_FAILURE_COOLDOWN_MS),
+        detailCaptureErrorCode(error)
+      );
+      throw error;
+    }
+  }
+
+  private async withCaptureLock<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.#captureTail;
+    let release!: () => void;
+    this.#captureTail = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
+  }
+
+  private async captureListing(listingId: number): Promise<ListingDetailCaptureResult> {
     const database = this.#database();
     const listing = database.listings.get(listingId);
     if (listing === undefined) throw new Error(`Listing not found: ${listingId}`);
@@ -77,7 +180,9 @@ export class ListingDetailCaptureService {
         ...normalizeInput,
         ...(detail.structuredFacts === undefined ? {} : { structuredFacts: detail.structuredFacts })
       });
-      database.listingDetailDescriptions.save(listingId, detail.description, capturedAt);
+      if (detail.description !== null) {
+        database.listingDetailDescriptions.save(listingId, detail.description, capturedAt);
+      }
       database.listingDetailFacts.save(
         listingId,
         structuredFactValues(detail.structuredFacts),
@@ -173,4 +278,27 @@ function sameFacebookListingUrl(expected: string, actual: string): boolean {
   } catch {
     return false;
   }
+}
+
+function offsetTimestamp(value: string, offsetMs: number): string {
+  return new Date(Date.parse(value) + offsetMs).toISOString();
+}
+
+function detailCaptureErrorCode(error: unknown): string {
+  if (typeof error === "object" && error !== null &&
+      "code" in error && typeof error.code === "string") {
+    return error.code;
+  }
+  return error instanceof Error ? error.name : "DETAIL_CAPTURE_FAILED";
+}
+
+function isBrowserUnavailable(error: unknown): boolean {
+  if (typeof error !== "object" || error === null ||
+      !("code" in error) || typeof error.code !== "string") return false;
+  return [
+    "BROWSER_NOT_OPEN",
+    "BROWSER_BUSY",
+    "BROWSER_DETAIL_UNSUPPORTED",
+    "BROWSER_RESUME_REQUIRED"
+  ].includes(error.code);
 }

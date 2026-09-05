@@ -70,6 +70,40 @@ describe("DeepSeek client", () => {
     expect(userContent).not.toContain("sellerName");
   });
 
+  it("sends allowlisted structured vehicle metadata as source facts", async () => {
+    fake = await FakeDeepSeekServer.start((_request, response) => json(response, 200, completion(enrichment())));
+    const client = new DeepSeekClient({ apiKey: "secret", baseUrl: fake.url });
+
+    await client.enrich({
+      ...input(),
+      sourceFacts: {
+        mileageKm: {
+          structuredKm: null,
+          descriptionKm: null,
+          cardKm: null,
+          selectedKm: null,
+          source: "none",
+          conflict: false
+        },
+        structuredVehicle: {
+          year: 2020,
+          mileageKm: null,
+          make: "Volkswagen",
+          model: "Golf",
+          variant: null,
+          fuel: "diesel",
+          transmission: "manual",
+          powerHp: null
+        }
+      }
+    });
+    const messages = fake.requests[0]?.body.messages as Array<{ role: string; content: string }>;
+    const userContent = messages.find(({ role }) => role === "user")?.content ?? "";
+    expect(userContent).toContain('"structuredVehicle"');
+    expect(userContent).toContain('"make":"Volkswagen"');
+    expect(userContent).toContain('"fuel":"diesel"');
+  });
+
   it("fails closed for malformed or schema-invalid responses", async () => {
     let count = 0;
     fake = await FakeDeepSeekServer.start((_request, response) => {

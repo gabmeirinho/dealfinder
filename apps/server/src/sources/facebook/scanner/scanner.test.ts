@@ -151,6 +151,30 @@ describe("Facebook scanner", () => {
       .toBeDefined();
   });
 
+  it("runs the post-scan hook after listings are committed", async () => {
+    const setup = createSetup();
+    database = setup.database;
+    let committedListingSeen = false;
+    const scanner = new FacebookScanner({
+      database: () => setup.database,
+      browser: () => new FakeScanBrowser([{
+        cards: [card(1)],
+        atEnd: true,
+        page: marketplacePage("Marketplace results")
+      }]),
+      now: () => new Date("2026-08-23T10:00:00.000Z"),
+      afterScan: async (searchId) => {
+        committedListingSeen = setup.database.listings.getBySource(
+          "facebook",
+          candidate(1).sourceListingId
+        ) !== undefined && setup.database.searches.get(searchId) !== undefined;
+      }
+    });
+
+    await scanner.scan(setup.searchId);
+    expect(committedListingSeen).toBe(true);
+  });
+
   it("still fails closed when too much of the result page is malformed", async () => {
     const setup = createSetup();
     database = setup.database;

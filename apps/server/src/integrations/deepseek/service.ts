@@ -1,5 +1,9 @@
 import type { DatabaseConnection, EnrichmentRequestFailure } from "@dealfinder/db";
-import { applyFactCorrections, createEnrichmentInput } from "@dealfinder/domain";
+import {
+  applyAuthoritativeStructuredFacts,
+  applyFactCorrections,
+  createEnrichmentInput
+} from "@dealfinder/domain";
 
 import { DeepSeekClient, DeepSeekError } from "./client.js";
 import type { Logger } from "../../logging/index.js";
@@ -71,11 +75,20 @@ export class DeepSeekEnrichmentService {
       const detailFacts = database.listingDetailFacts.get(claim.listingId);
       const result = await this.#client.enrich(createEnrichmentInput(
         effectiveFacts,
-        detailFacts === undefined ? undefined : { mileageKm: detailFacts.mileage }
+        detailFacts === undefined ? undefined : {
+          mileageKm: detailFacts.mileage,
+          structuredVehicle: detailFacts.structuredFacts
+        }
       ));
       const completedAt = this.#now().toISOString();
+      const authoritative = applyAuthoritativeStructuredFacts(
+        result.enrichment,
+        effectiveFacts,
+        detailFacts?.structuredFacts,
+        new Set(database.corrections.listForListing(claim.listingId).map(({ field }) => field))
+      );
       const advanced = database.enrichmentProcessing.completeSuccess(
-        claim, result.enrichment, completedAt, result.providerRequestId
+        claim, authoritative, completedAt, result.providerRequestId
       );
       if (advanced && this.#afterEnrichment !== undefined) {
         try {

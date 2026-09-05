@@ -39,6 +39,7 @@ export interface DeepSeekClientOptions {
 const SYSTEM_PROMPT = `You enrich vehicle marketplace listings. Return JSON only.
 Never return seller identity, contact details, URLs, account data, diagnostics, credentials, or quoted evidence.
 When sourceFacts.mileageKm is present, use its selectedKm as the primary mileage. If conflict is true, retain the selected value but add the mileage uncertainty.
+When sourceFacts.structuredVehicle contains a non-null value, treat that Facebook structured value as authoritative and do not replace it with an inference. Only fill fields that Facebook left unknown.
 Use exactly this object shape and no additional fields:
 {"schemaVersion":1,"vehicle":{"make":null,"model":null,"variant":null,"year":null,"mileageKm":null,"fuel":null,"transmission":null,"powerHp":null},"price":{"amountCents":null,"interpretation":"unknown"},"sellerType":null,"indicators":{"financing":false,"monthlyPayment":false,"deposit":false,"damaged":false,"imported":false},"uncertainties":[]}
 Allowed fuel values: petrol, diesel, hybrid, plug_in_hybrid, electric, lpg, other, or null.
@@ -150,7 +151,19 @@ function privacySafeInput(input: EnrichmentInput): EnrichmentInput {
           selectedKm: safeMileage(input.sourceFacts.mileageKm.selectedKm),
           source: safeMileageSource(input.sourceFacts.mileageKm.source),
           conflict: input.sourceFacts.mileageKm.conflict === true
-        }
+        },
+        ...(input.sourceFacts.structuredVehicle === undefined ? {} : {
+          structuredVehicle: {
+            year: input.sourceFacts.structuredVehicle.year,
+            mileageKm: safeMileage(input.sourceFacts.structuredVehicle.mileageKm),
+            make: input.sourceFacts.structuredVehicle.make,
+            model: input.sourceFacts.structuredVehicle.model,
+            variant: input.sourceFacts.structuredVehicle.variant,
+            fuel: input.sourceFacts.structuredVehicle.fuel,
+            transmission: input.sourceFacts.structuredVehicle.transmission,
+            powerHp: safePower(input.sourceFacts.structuredVehicle.powerHp)
+          }
+        })
       }
     }),
     facts: {
@@ -183,6 +196,12 @@ function safeMileage(value: unknown): number | null {
 
 function safeMileageSource(value: unknown): "facebook_structured" | "description" | "card" | "none" {
   return value === "facebook_structured" || value === "description" || value === "card" ? value : "none";
+}
+
+function safePower(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 20 && value <= 2_000
+    ? value
+    : null;
 }
 
 function statusError(status: number): DeepSeekError {

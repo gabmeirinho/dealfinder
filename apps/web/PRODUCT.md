@@ -32,7 +32,7 @@ The application runs manually on the operator's machine, uses Europe/Lisbon time
 
 ## Evidence on Hand
 
-Product requirements are recorded in the repository roadmap. No customer claims, marketplace results, vehicle imagery, testimonials, or performance evidence are available and none should be fabricated.
+No customer claims, marketplace results, vehicle imagery, testimonials, or performance evidence are available and none should be fabricated.
 
 ## Product Principles
 
