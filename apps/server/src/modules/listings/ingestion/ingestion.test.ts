@@ -215,6 +215,44 @@ describe("listing ingestion", () => {
     expect(facts?.facts.seller.type).toBe("private");
   });
 
+  it("ingests Ibiza and Leon through separate hard SEAT searches", () => {
+    const databaseInstance = openDatabase({ filename: ":memory:" });
+    database = databaseInstance;
+    const ibizaSearch = createSeatSearch(databaseInstance, "SEAT Ibiza", "Ibiza");
+    const leonSearch = createSeatSearch(databaseInstance, "SEAT Leon", "Leon");
+    const service = new ListingIngestionService(() => databaseInstance);
+
+    service.ingestScan(scan(ibizaSearch.id, "2026-08-23T09:00:00.000Z", false, [
+      candidate({
+        sourceListingId: "100000000000010",
+        title: "SEAT Ibiza 1.4 TDI Reference 2016",
+        rawCardFacts: ["145 000 km", "Diesel"]
+      })
+    ]));
+    service.ingestScan(scan(leonSearch.id, "2026-08-23T09:01:00.000Z", false, [
+      candidate({
+        sourceListingId: "100000000000011",
+        title: "Seat León ST FR 1.5 TSI 2020",
+        rawCardFacts: ["72 000 km", "Gasolina"]
+      })
+    ]));
+
+    const ibizaListing = databaseInstance.listings.getBySource("facebook", "100000000000010");
+    const leonListing = databaseInstance.listings.getBySource("facebook", "100000000000011");
+    expect(databaseInstance.normalizedVehicles.getFacts(ibizaListing?.id as number)?.facts)
+      .toMatchObject({ make: "SEAT", model: "Ibiza" });
+    expect(databaseInstance.normalizedVehicles.getFacts(leonListing?.id as number)?.facts)
+      .toMatchObject({ make: "SEAT", model: "León" });
+    expect(databaseInstance.normalizedVehicles.getMatch(ibizaListing?.id as number, ibizaSearch.id))
+      .toMatchObject({ eligible: true, hardFailures: [] });
+    expect(databaseInstance.normalizedVehicles.getMatch(leonListing?.id as number, leonSearch.id))
+      .toMatchObject({ eligible: true, hardFailures: [] });
+    expect(databaseInstance.enrichmentProcessing.getQueueItem(ibizaListing?.id as number))
+      .toMatchObject({ state: "queued" });
+    expect(databaseInstance.enrichmentProcessing.getQueueItem(leonListing?.id as number))
+      .toMatchObject({ state: "queued" });
+  });
+
   it("records parts-only cars as vehicles while excluding them from enrichment", () => {
     const setup = createSetup();
     database = setup.database;
@@ -232,7 +270,7 @@ describe("listing ingestion", () => {
     });
   });
 
-  it("does not enrich titles that fail hard search criteria", () => {
+  it("queues titles whose make is unknown without declaring them eligible", () => {
     const setup = createSetup();
     database = setup.database;
     const service = new ListingIngestionService(() => setup.database);
@@ -243,8 +281,9 @@ describe("listing ingestion", () => {
 
     const listing = setup.database.listings.getBySource("facebook", "100000000000004");
     expect(setup.database.normalizedVehicles.getMatch(listing?.id as number, setup.searchId))
-      .toMatchObject({ eligible: false });
-    expect(setup.database.enrichmentProcessing.getQueueItem(listing?.id as number)).toBeUndefined();
+      .toMatchObject({ eligible: false, status: "needs_information" });
+    expect(setup.database.enrichmentProcessing.getQueueItem(listing?.id as number))
+      .toMatchObject({ state: "queued" });
   });
 
   it("backfills missing and stale classifications idempotently", () => {
@@ -307,6 +346,13 @@ function createSetup() {
   const draft = createVehicleSearchDraft("Golf");
   draft.criteria.makeKeywords = { value: ["Volkswagen"], strength: "hard" };
   return { database, searchId: database.searches.create(draft).id };
+}
+
+function createSeatSearch(database: DatabaseConnection, name: string, model: string) {
+  const draft = createVehicleSearchDraft(name);
+  draft.criteria.makeKeywords = { value: ["SEAT"], strength: "hard" };
+  draft.criteria.modelKeywords = { value: [model], strength: "hard" };
+  return database.searches.create(draft);
 }
 
 function scan(

@@ -2,6 +2,7 @@ import type { DatabaseConnection, EnrichmentRequestFailure } from "@dealfinder/d
 import {
   applyAuthoritativeStructuredFacts,
   applyFactCorrections,
+  evaluateVehicleMatch,
   createEnrichmentInput
 } from "@dealfinder/domain";
 
@@ -72,6 +73,14 @@ export class DeepSeekEnrichmentService {
         stored.facts,
         database.corrections.listForListing(claim.listingId)
       );
+      const plausible = database.listings.listSearchIds(claim.listingId).some((searchId) => {
+        const search = database.searches.get(searchId);
+        return search !== undefined && evaluateVehicleMatch(effectiveFacts, search.criteria).status !== "excluded";
+      });
+      if (!plausible) {
+        database.enrichmentProcessing.cancelClaim(claim, this.#now().toISOString(), "excluded_by_filters");
+        return "excluded";
+      }
       const detailFacts = database.listingDetailFacts.get(claim.listingId);
       const result = await this.#client.enrich(createEnrichmentInput(
         effectiveFacts,

@@ -129,17 +129,17 @@ export class EnrichmentProcessingRepository {
     return this.getQueueItem(listingId) as ProcessingQueueItem;
   }
 
-  public cancelExcluded(listingId: number): boolean {
+  public cancelExcluded(listingId: number, reason = "excluded_by_classifier"): boolean {
     const result = this.database.prepare(`
       UPDATE processing_queue
       SET state = 'cancelled', started_at = NULL, completed_at = NULL,
-          last_error_code = 'excluded_by_classifier'
+          last_error_code = ?
       WHERE listing_id = ? AND state IN ('queued', 'processing', 'failed')
-    `).run(listingId);
+    `).run(reason, listingId);
     return Number(result.changes) === 1;
   }
 
-  public cancelClaim(claim: ProcessingClaim, cancelledAt: string): void {
+  public cancelClaim(claim: ProcessingClaim, cancelledAt: string, reason = "excluded_by_classifier"): void {
     timestamp(cancelledAt, "Cancellation time");
     withTransaction(this.database, () => {
       this.finishRequest(
@@ -148,9 +148,9 @@ export class EnrichmentProcessingRepository {
         cancelledAt,
         null,
         null,
-        "excluded_by_classifier"
+        reason
       );
-      this.cancelExcluded(claim.listingId);
+      this.cancelExcluded(claim.listingId, reason);
     });
   }
 

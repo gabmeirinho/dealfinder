@@ -92,15 +92,29 @@ scans retain at most 300 cards; later scans stop after 50 consecutive known
 listing IDs. Dashboard **Scan** requests enter this same durable queue, and the
 saved-search list reports persisted last/next scan times.
 
-Result cards persist a description when Facebook exposes one in the card
-markup. If a card has no description, the listing inspector offers **Capture
-full description**. That action opens only the selected Facebook listing in the
-visible controlled browser, captures the rendered seller description, stores
-the capture locally, refreshes normalized facts and match eligibility, and
-queues the listing for DeepSeek enrichment when eligible. It never crawls
-listing details automatically.
+Hard-filter evaluation distinguishes **Matches**, **Excluded**, and **Needs more
+information**. Missing facts do not count as confirmed mismatches: plausible
+incomplete vehicles enter DeepSeek enrichment and remain visible in the inbox,
+but receive no score until all hard criteria are confirmed. Known hard failures
+stay excluded. The worker rechecks current facts before sending a provider
+request, and scoring rechecks eligibility using enriched facts afterward.
+Existing unprocessed incomplete listings are queued automatically by migration.
 
-During a selected-listing capture, the parser also reads a small allowlisted
+Result cards persist a description when Facebook exposes one. After each
+successful search scan, a bounded batch captures details for up to five active,
+non-excluded vehicles, prioritizing those missing required facts. Remaining
+candidates wait for later scans. Attempts and cooldowns persist across restarts:
+successful captures are refreshed after seven days, failures retry after one
+day, and browser unavailability stops the batch. Captures use the visible
+controlled browser and retain allowlisted vehicle facts locally. They refresh
+normalization and match eligibility, then queue enrichment for any vehicle
+still plausible for at least one linked search. Missing information remains
+unknown if capture or enrichment cannot resolve it.
+
+The listing inspector also offers **Capture full description** for manual
+capture of a selected listing.
+
+During a detail capture, the parser also reads a small allowlisted
 set of Facebook vehicle metadata. Structured mileage is selected when present;
 seller-description (or result-card) mileage is the fallback. Both values are
 retained, and a mileage conflict is surfaced in the listing detail for

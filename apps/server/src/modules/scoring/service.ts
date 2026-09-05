@@ -110,6 +110,14 @@ function resolveListing(
 ): ResolvedListing | undefined {
   const normalized = database.normalizedVehicles.getFacts(stored.listingId);
   if (normalized === undefined) return undefined;
+  // A capture or scan can update facts while another listing finishes enrichment.
+  // Do not let that global rescore revive an older interpretation of this listing.
+  if (stored.sourceNormalizedAt < normalized.normalizedAt) {
+    for (const searchId of database.listings.listSearchIds(stored.listingId)) {
+      database.dealScores.delete(stored.listingId, searchId);
+    }
+    return undefined;
+  }
   const corrections = database.corrections.listForListing(stored.listingId);
   const corrected = new Set<NormalizedFactField>(corrections.map(({ field }) => field));
   const effective = applyFactCorrections(normalized.facts, corrections);

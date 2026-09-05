@@ -33,6 +33,23 @@ const detail: ListingDetail = {
 };
 
 describe("listing review dashboard", () => {
+  it("explains missing hard facts without presenting a filter failure", async () => {
+    const pending: ListingDetail = {
+      ...detail, matchStatus: "needs_information",
+      matches: [{ searchId: "golf", searchName: "Diesel Golfs", distance: null,
+        evaluation: { eligible: false, status: "needs_information", hardFailures: [],
+          missingCriteria: [{ criterion: "fuels", explanation: "fuel is unknown" }] } }]
+    };
+    const client = mockClient();
+    vi.mocked(client.get).mockResolvedValue(pending);
+    render(<ListingDashboard client={client} initialListings={[pending]} />);
+    expect(screen.getByText(/Needs more information/)).toBeTruthy();
+    await userEvent.setup().click(screen.getByRole("button", { name: /review .*volkswagen golf/iu }));
+    expect(await screen.findByText("fuel is unknown")).toBeTruthy();
+    expect(screen.queryByText("Review filter mismatches")).toBeNull();
+    expect(screen.queryByText("Hard filters passed")).toBeNull();
+  });
+
   it("renders untrusted copy as text and keeps seller messaging copy-only", async () => {
     const client = mockClient();
     const user = userEvent.setup();

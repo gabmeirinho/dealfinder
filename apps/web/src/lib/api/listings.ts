@@ -20,6 +20,7 @@ export interface ListingSummary {
   facts: VehicleFacts | null;
   risk: RiskAssessment | null;
   score: DealScore | null;
+  matchStatus?: "matches" | "excluded" | "needs_information";
   processing: { state: string; lastErrorCode: string | null } | null;
 }
 
@@ -75,7 +76,7 @@ export interface ListingDetail extends ListingSummary {
   }>;
   matches: Array<{
     searchId: string; searchName: string;
-    evaluation: { eligible: boolean; hardFailures: Array<{ label?: string; explanation?: string }> } | null;
+    evaluation: { eligible: boolean; status?: "matches" | "excluded" | "needs_information"; missingCriteria?: Array<{ criterion: string; explanation: string }>; hardFailures: Array<{ label?: string; explanation?: string }> } | null;
     distance: { distance: { label: string; status: string } } | null;
   }>;
   scores: Array<{ searchId: string; searchName: string; score: DealScore }>;

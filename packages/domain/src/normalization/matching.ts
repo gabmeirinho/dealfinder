@@ -7,7 +7,11 @@ export interface FilterExplanation {
   explanation: string;
 }
 
+export type VehicleMatchStatus = "matches" | "excluded" | "needs_information";
+
 export interface VehicleMatchEvaluation {
+  status: VehicleMatchStatus;
+  missingCriteria: readonly FilterExplanation[];
   eligible: boolean;
   hardFailures: readonly FilterExplanation[];
   softContributions: readonly FilterExplanation[];
@@ -18,6 +22,7 @@ export function evaluateVehicleMatch(
   criteria: VehicleSearchCriteria
 ): VehicleMatchEvaluation {
   const hardFailures: FilterExplanation[] = [];
+  const missingCriteria: FilterExplanation[] = [];
   const softContributions: FilterExplanation[] = [];
   const text = fold([
     facts.original.title,
@@ -33,7 +38,8 @@ export function evaluateVehicleMatch(
     if (constraint === null) return;
     const item = { criterion, matched, explanation };
     if (constraint.strength === "hard") {
-      if (matched !== true) hardFailures.push(item);
+      if (matched === false) hardFailures.push(item);
+      else if (matched === null) missingCriteria.push(item);
     } else {
       softContributions.push(item);
     }
@@ -71,13 +77,16 @@ export function evaluateVehicleMatch(
     facts.seller.type === null ? null : facts.seller.type === criteria.sellerPreference?.value,
     explain("seller type", facts.seller.type));
   add("requiredKeywords", criteria.requiredKeywords,
-    criteria.requiredKeywords === null ? null : criteria.requiredKeywords.value.every((keyword) => text.includes(fold(keyword))),
+    criteria.requiredKeywords === null ? null : criteria.requiredKeywords.value.every((keyword) => text.includes(fold(keyword)))
+      ? true : facts.original.description === null ? null : false,
     "required keyword check against original listing text");
   add("excludedKeywords", criteria.excludedKeywords,
     criteria.excludedKeywords === null ? null : criteria.excludedKeywords.value.every((keyword) => !text.includes(fold(keyword))),
     "excluded keyword check against original listing text");
 
-  return { eligible: hardFailures.length === 0, hardFailures, softContributions };
+  const status: VehicleMatchStatus = hardFailures.length > 0 ? "excluded" :
+    missingCriteria.length > 0 ? "needs_information" : "matches";
+  return { status, eligible: status === "matches", hardFailures, missingCriteria, softContributions };
 }
 
 function keywordMatch(value: string | null, keywords: readonly string[] | undefined): boolean | null {

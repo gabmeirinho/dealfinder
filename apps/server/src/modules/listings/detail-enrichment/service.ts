@@ -5,6 +5,7 @@ import type {
 } from "@dealfinder/db";
 import {
   applyFactCorrections,
+  applyReusableRules,
   assessVehicleRisk,
   evaluateVehicleMatch,
   normalizeVehicleFacts
@@ -170,16 +171,16 @@ export class ListingDetailCaptureService {
     const result = database.transaction(() => {
       const normalizeInput = {
         ...stored.facts.original,
-        description: detail.description,
+        description: detail.description ?? stored.facts.original.description,
         referenceYear: new Date(capturedAt).getUTCFullYear(),
         seller: stored.facts.seller
       };
       const descriptionNormalized = normalizeVehicleFacts({ ...normalizeInput, cardFacts: [] });
       const cardNormalized = normalizeVehicleFacts({ ...normalizeInput, description: null });
-      const normalized = normalizeVehicleFacts({
+      const normalized = applyReusableRules(normalizeVehicleFacts({
         ...normalizeInput,
         ...(detail.structuredFacts === undefined ? {} : { structuredFacts: detail.structuredFacts })
-      });
+      }), database.corrections.listApprovedRules());
       if (detail.description !== null) {
         database.listingDetailDescriptions.save(listingId, detail.description, capturedAt);
       }
@@ -202,24 +203,24 @@ export class ListingDetailCaptureService {
         database.corrections.listForListing(listingId)
       );
       database.normalizedVehicles.saveRisk(listingId, assessVehicleRisk(effective), capturedAt);
-      let eligible = false;
+      let plausible = false;
       for (const searchId of database.listings.listSearchIds(listingId)) {
         const search = database.searches.get(searchId);
         if (search === undefined) continue;
         const match = evaluateVehicleMatch(effective, search.criteria);
         database.normalizedVehicles.saveMatch(listingId, searchId, match, capturedAt);
-        eligible ||= match.eligible;
+        plausible ||= match.status !== "excluded";
         database.dealScores.delete(listingId, searchId);
       }
-      if (eligible) database.enrichmentProcessing.enqueue(listingId, capturedAt);
-      return { eligible };
+      if (plausible) database.enrichmentProcessing.enqueue(listingId, capturedAt);
+      return { plausible };
     });
-    if (result.eligible) this.#processingWake?.();
+    if (result.plausible) this.#processingWake?.();
     return {
       listingId,
       description: detail.description,
       capturedAt,
-      queuedForEnrichment: result.eligible
+      queuedForEnrichment: result.plausible
     };
   }
 }

@@ -47,7 +47,7 @@ export class ListingReviewService {
     conditions.push("(classification.decision IS NULL OR classification.decision <> 'exclude')");
     conditions.push(`EXISTS (
       SELECT 1 FROM listing_match_evaluations visible_match
-      WHERE visible_match.listing_id = listings.id AND visible_match.eligible = 1
+      WHERE visible_match.listing_id = listings.id AND visible_match.match_status <> 'excluded'
     )`);
     if (filters.query !== undefined && filters.query.trim() !== "") {
       conditions.push("(listings.title LIKE ? OR facts.make LIKE ? OR facts.model LIKE ?)");
@@ -188,6 +188,9 @@ export class ListingReviewService {
       ? null
       : applyFactCorrections(stored.facts, database.corrections.listForListing(listingId));
     const searchIds = database.listings.listSearchIds(listingId);
+    const matches = searchIds.map((searchId) => database.normalizedVehicles.getMatch(listingId, searchId));
+    const matchStatus = matches.some((match) => match?.status === "matches") ? "matches" :
+      matches.some((match) => match?.status === "needs_information") ? "needs_information" : "excluded";
     const scores = searchIds.map((searchId) => database.dealScores.get(listingId, searchId))
       .filter((score) => score !== undefined);
     const topScore = scores.sort((left, right) => right.score.total - left.score.total)[0] ?? null;
@@ -207,7 +210,8 @@ export class ListingReviewService {
       review,
       facts: effective,
       risk: database.normalizedVehicles.getRisk(listingId) ?? null,
-      score: topScore?.score ?? null,
+      matchStatus,
+      score: matchStatus === "matches" ? topScore?.score ?? null : null,
       processing: database.enrichmentProcessing.getQueueItem(listingId) ?? null,
       classification: database.listingClassifications.get(listingId) ?? null
     };
