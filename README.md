@@ -146,22 +146,50 @@ logs redact tokens and API keys.
 DeepSeek enrichment uses only `deepseek-v4-flash` with thinking disabled and a
 strict JSON schema. Provider requests contain the listing title, description,
 and normalized vehicle facts only. An insufficient-credit response leaves raw
-Facebook scans running but durably pauses all downstream processing and alerts;
+Facebook scans running but durably pauses AI enrichment and alerts;
 new candidates remain queued. After adding credit, explicitly test it with
-`POST /api/integrations/deepseek/credit`. Processing resumes only when the
-provider balance check succeeds and reports credit available. `GET` on the same
+`POST /api/integrations/deepseek/credit`. AI processing resumes only when the
+provider balance check succeeds and reports credit available. Deterministic
+assessments of already enriched listings remain available during a credit pause. `GET` on the same
 endpoint reports the persisted pause state.
 
-Deal scores are deterministic and explainable. Each eligible enriched listing
-stores separate contributions for market price position, soft preferences,
-freshness, approximate distance, data completeness, and risk. Comparable
-cohorts require the same make/model, compatible variant, a two-year band, a
-40,000 km mileage band, fuel, and transmission. Price outliers are removed, and
-fewer than five reasonable comparables always reports **Insufficient market
-data** without claiming a discount. Suspiciously low prices reduce confidence,
-apply a risk penalty, and cap the score rather than automatically ranking first.
-`GET /api/searches/:searchId/deal-scores` returns scores in deterministic rank
-order with their confidence, market-data status, cohort, and explanations.
+Deal assessments separate three independent dimensions; there is no combined
+score out of 100:
+
+- **Market value** compares the full asking price with comparable vehicles. With
+  at least five comparables, it reports the median, the middle 50% asking-price
+  range, and percentage above or below the median. This describes asking prices,
+  not a predicted sale price. With insufficient evidence, range and discount are
+  null. Suspicious or ambiguous prices show **Verify asking price** and never
+  claim a bargain discount.
+- **Personal fit** reports the percentage of known soft preferences matched,
+  alongside matched, missed, and unknown counts and per-preference explanations.
+  No configured preferences means no fit percentage. Partial results are labelled
+  as a percentage of known preferences. Distance is shown separately; neither
+  distance nor personal preferences changes market value or valuation confidence.
+- **Valuation confidence** is an explainable low/medium/high evidence rating,
+  not a probability. It considers comparable count, known facts, price spread,
+  observation recency, unknown variants, enrichment uncertainties, and captured
+  fact conflicts. Recent narrow cohorts with at least ten comparables can earn
+  high confidence; missing or conflicting evidence limits it.
+
+Comparable cohorts require the same make/model, compatible variant, a two-year
+band, a 40,000 km mileage band, fuel, and transmission. Recorded duplicate groups
+count once, including exclusion of the subject's own relistings. Sold/inactive
+vehicles and observations older than 90 days are excluded from reference history.
+Unknown variants may provide comparisons but prevent high confidence. Outliers
+are removed before calculating the median and range.
+
+The inbox defaults to recently seen listings and offers separate market-discount,
+personal-fit, and confidence sorting. The inspector identifies the saved search
+and lets you switch between its assessments when a listing belongs to several
+searches. `GET /api/listings?sort=recent|market_value|personal_fit|confidence` selects
+an inbox order. `GET /api/searches/:searchId/deal-scores` returns version 2
+assessments in market-discount order, then personal fit and listing ID as tie
+breakers. Each `score` contains `marketValue`, `personalFit`, and `confidence`;
+legacy `total` and additive component fields are removed. Migration 21 clears
+only derived version 1 assessments and cohorts; startup rebuilds assessments
+from retained listing facts and enrichment, without new provider requests.
 
 SQLite data is migrated automatically when `openDatabase` opens a connection.
 The database uses foreign-key enforcement, WAL journaling for file-backed

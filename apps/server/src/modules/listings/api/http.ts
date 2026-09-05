@@ -47,6 +47,10 @@ export async function handleListingReviewRequest(
     if (segments[1] !== "listings") return false;
     if (segments.length === 2) {
       if (request.method !== "GET") return methodNotAllowed(response, "GET");
+      const sort = url.searchParams.get("sort") ?? "recent";
+      if (!["recent", "market_value", "personal_fit", "confidence"].includes(sort)) {
+        throw new Error("Invalid listing sort");
+      }
       const stateValue = url.searchParams.get("state");
       const state = stateValue === null ? undefined : parseState(stateValue);
       const searchId = url.searchParams.get("searchId") ?? undefined;
@@ -59,6 +63,7 @@ export async function handleListingReviewRequest(
           ...(searchId === undefined ? {} : { searchId }),
           ...(query === undefined ? {} : { query }),
           archived,
+          sort: sort as "recent" | "market_value" | "personal_fit" | "confidence",
           risk
         })
       });

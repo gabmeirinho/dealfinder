@@ -17,6 +17,7 @@ export interface ListingInboxFilters {
   risk?: boolean;
   archived?: boolean;
   query?: string;
+  sort?: "recent" | "market_value" | "personal_fit" | "confidence";
 }
 
 export class ListingReviewService {
@@ -54,6 +55,11 @@ export class ListingReviewService {
       const query = `%${filters.query.trim().slice(0, 100).replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
       parameters.push(query, query, query);
     }
+    const order = filters.sort === "market_value" ? "market_discount_percent" :
+      filters.sort === "personal_fit" ? "personal_fit_percent" :
+      filters.sort === "confidence" ? "CASE confidence WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END" : null;
+    const ranking = order === null ? "" :
+      `(SELECT MAX(${order}) FROM listing_deal_scores scores WHERE scores.listing_id = listings.id) DESC,`;
     const rows = database.database.prepare(`
       SELECT listings.id
       FROM listings
@@ -62,12 +68,11 @@ export class ListingReviewService {
       LEFT JOIN listing_risk_assessments risk ON risk.listing_id = listings.id
       LEFT JOIN listing_classifications classification ON classification.listing_id = listings.id
       WHERE ${conditions.join(" AND ")}
-      ORDER BY COALESCE((SELECT max(total_score) FROM listing_deal_scores scores
-                         WHERE scores.listing_id = listings.id), -1) DESC,
+      ORDER BY ${ranking}
                listings.last_seen_at DESC, listings.id DESC
       LIMIT 250
     `).all(...parameters) as unknown as Array<{ id: number }>;
-    return rows.map(({ id }) => this.summary(id));
+    return rows.map(({ id }) => this.summary(id, filters.sort));
   }
 
   public detail(listingId: number): Record<string, unknown> | undefined {
@@ -85,7 +90,7 @@ export class ListingReviewService {
       const score = database.dealScores.get(listingId, searchId);
       if (score === undefined) return [];
       return [{ ...score, searchName: database.searches.get(searchId)?.name ?? "Deleted search" }];
-    }).sort((left, right) => right.score.total - left.score.total);
+    }).sort((left, right) => left.searchName.localeCompare(right.searchName) || left.searchId.localeCompare(right.searchId));
     const duplicate = database.duplicates.listGroups().find((group) =>
       group.members.some((member) => member.listingId === listingId)
     );
@@ -178,7 +183,7 @@ export class ListingReviewService {
       : this.corrections.rejectRule(proposalId, decidedAt);
   }
 
-  private summary(listingId: number): Record<string, unknown> {
+  private summary(listingId: number, sort: ListingInboxFilters["sort"] = "recent"): Record<string, unknown> {
     const database = this.database();
     const listing = database.listings.get(listingId);
     const review = database.listingReviews.get(listingId);
@@ -193,7 +198,14 @@ export class ListingReviewService {
       matches.some((match) => match?.status === "needs_information") ? "needs_information" : "excluded";
     const scores = searchIds.map((searchId) => database.dealScores.get(listingId, searchId))
       .filter((score) => score !== undefined);
-    const topScore = scores.sort((left, right) => right.score.total - left.score.total)[0] ?? null;
+    const value = (stored: typeof scores[number]): number => sort === "market_value"
+      ? stored.score.marketValue.discountPercent ?? -Infinity : sort === "personal_fit"
+      ? stored.score.personalFit.percent ?? -Infinity : sort === "confidence"
+      ? ({ high: 3, medium: 2, low: 1 }[stored.score.confidence.level]) : 0;
+    const topScore = scores.sort((left, right) => {
+      const difference = value(right) - value(left);
+      return (Number.isNaN(difference) ? 0 : difference) || left.searchId.localeCompare(right.searchId);
+    })[0] ?? null;
     const observation = latestObservation(database, listing.rawCandidateId);
     return {
       id: listing.id,
@@ -211,6 +223,7 @@ export class ListingReviewService {
       facts: effective,
       risk: database.normalizedVehicles.getRisk(listingId) ?? null,
       matchStatus,
+      assessmentSearchName: topScore === null ? null : database.searches.get(topScore.searchId)?.name ?? null,
       score: matchStatus === "matches" ? topScore?.score ?? null : null,
       processing: database.enrichmentProcessing.getQueueItem(listingId) ?? null,
       classification: database.listingClassifications.get(listingId) ?? null

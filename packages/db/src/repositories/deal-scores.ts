@@ -5,8 +5,7 @@ import {
   MINIMUM_COMPARABLES,
   type ComparableCohortCriteria,
   type DealScore,
-  type DealScoreCalculation,
-  type DealScoreComponent
+  type DealScoreCalculation
 } from "@dealfinder/domain";
 
 import { withTransaction } from "../transactions.js";
@@ -15,14 +14,9 @@ interface ScoreRow {
   listing_id: number;
   search_id: string;
   score_version: number;
-  total_score: number;
-  confidence: DealScore["confidence"];
-  market_data_status: DealScore["marketDataStatus"];
-  market_data_label: DealScore["marketDataLabel"];
+  assessment_json: string;
+  market_data_status: "sufficient" | "insufficient";
   median_price_cents: number | null;
-  comparable_count: number;
-  discount_percent: number | null;
-  components_json: string;
   scored_at: string;
   criteria_json: string;
   candidate_count: number;
@@ -94,34 +88,20 @@ export class DealScoresRepository {
       });
       this.database.prepare(`
         INSERT INTO listing_deal_scores (
-          listing_id, search_id, score_version, total_score, confidence,
-          market_data_status, market_data_label, median_price_cents,
-          comparable_count, discount_percent, components_json, scored_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          listing_id, search_id, score_version, assessment_json,
+          market_discount_percent, personal_fit_percent, confidence, scored_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(listing_id, search_id) DO UPDATE SET
           score_version = excluded.score_version,
-          total_score = excluded.total_score,
+          assessment_json = excluded.assessment_json,
+          market_discount_percent = excluded.market_discount_percent,
+          personal_fit_percent = excluded.personal_fit_percent,
           confidence = excluded.confidence,
-          market_data_status = excluded.market_data_status,
-          market_data_label = excluded.market_data_label,
-          median_price_cents = excluded.median_price_cents,
-          comparable_count = excluded.comparable_count,
-          discount_percent = excluded.discount_percent,
-          components_json = excluded.components_json,
           scored_at = excluded.scored_at
       `).run(
-        listingId,
-        searchId,
-        calculation.score.version,
-        calculation.score.total,
-        calculation.score.confidence,
-        calculation.score.marketDataStatus,
-        calculation.score.marketDataLabel,
-        calculation.score.medianPriceCents,
-        calculation.score.comparableCount,
-        calculation.score.discountPercent,
-        JSON.stringify(calculation.score.components),
-        scoredAt
+        listingId, searchId, calculation.score.version, JSON.stringify(calculation.score),
+        calculation.score.marketValue.discountPercent, calculation.score.personalFit.percent,
+        calculation.score.confidence.level, scoredAt
       );
     });
     return this.get(listingId, searchId) as StoredDealScore;
@@ -129,12 +109,9 @@ export class DealScoresRepository {
 
   public get(listingId: number, searchId: string): StoredDealScore | undefined {
     const row = this.database.prepare(`
-      SELECT score.listing_id, score.search_id, score.score_version, score.total_score,
-             score.confidence, score.market_data_status, score.market_data_label,
-             score.median_price_cents, score.comparable_count, score.discount_percent,
-             score.components_json, score.scored_at, cohort.criteria_json,
-             cohort.candidate_count, cohort.excluded_outlier_count,
-             cohort.excluded_outlier_ids_json
+      SELECT score.listing_id, score.search_id, score.score_version, score.assessment_json,
+             score.scored_at, cohort.criteria_json, cohort.market_data_status, cohort.median_price_cents,
+             cohort.candidate_count, cohort.excluded_outlier_count, cohort.excluded_outlier_ids_json
       FROM listing_deal_scores score
       JOIN comparable_cohorts cohort
         ON cohort.subject_listing_id = score.listing_id AND cohort.search_id = score.search_id
@@ -145,17 +122,14 @@ export class DealScoresRepository {
 
   public listRanked(searchId: string): StoredDealScore[] {
     const rows = this.database.prepare(`
-      SELECT score.listing_id, score.search_id, score.score_version, score.total_score,
-             score.confidence, score.market_data_status, score.market_data_label,
-             score.median_price_cents, score.comparable_count, score.discount_percent,
-             score.components_json, score.scored_at, cohort.criteria_json,
-             cohort.candidate_count, cohort.excluded_outlier_count,
-             cohort.excluded_outlier_ids_json
+      SELECT score.listing_id, score.search_id, score.score_version, score.assessment_json,
+             score.scored_at, cohort.criteria_json, cohort.market_data_status, cohort.median_price_cents,
+             cohort.candidate_count, cohort.excluded_outlier_count, cohort.excluded_outlier_ids_json
       FROM listing_deal_scores score
       JOIN comparable_cohorts cohort
         ON cohort.subject_listing_id = score.listing_id AND cohort.search_id = score.search_id
       WHERE score.search_id = ?
-      ORDER BY score.total_score DESC, score.listing_id ASC
+      ORDER BY score.market_discount_percent DESC, score.personal_fit_percent DESC, score.listing_id ASC
     `).all(searchId) as unknown as ScoreRow[];
     return rows.map((row) => this.map(row));
   }
@@ -177,7 +151,7 @@ export class DealScoresRepository {
       listingId: member.comparable_listing_id,
       priceCents: member.price_cents
     }));
-    const marketDataLabel = row.market_data_label;
+    const marketDataLabel = row.market_data_status === "sufficient" ? "Market data available" : "Insufficient market data";
     return {
       listingId: row.listing_id,
       searchId: row.search_id,
@@ -195,37 +169,36 @@ export class DealScoresRepository {
         marketDataStatus: row.market_data_status,
         marketDataLabel
       },
-      score: {
-        version: DEAL_SCORE_VERSION,
-        total: row.total_score,
-        confidence: row.confidence,
-        marketDataStatus: row.market_data_status,
-        marketDataLabel,
-        medianPriceCents: row.median_price_cents,
-        comparableCount: row.comparable_count,
-        discountPercent: row.discount_percent,
-        components: parseComponents(row.components_json)
-      }
+      score: parseAssessment(row.assessment_json, row.score_version)
     };
   }
 }
 
 function validateCalculation(calculation: DealScoreCalculation): void {
   if (calculation.score.version !== DEAL_SCORE_VERSION) throw new Error("Unsupported deal score version");
-  if (!Number.isInteger(calculation.score.total) || calculation.score.total < 0 || calculation.score.total > 100) {
-    throw new Error("Deal score total must be an integer from zero to one hundred");
+  const { marketValue: market, personalFit: fit } = calculation.score;
+  if (fit.percent !== null && (!Number.isInteger(fit.percent) || fit.percent < 0 || fit.percent > 100)) {
+    throw new Error("Personal fit must be an integer from zero to one hundred or null");
   }
-  if (calculation.score.comparableCount !== calculation.cohort.members.length) {
-    throw new Error("Deal score comparable count does not match its cohort");
+  if (market.comparableCount !== calculation.cohort.members.length ||
+      market.medianPriceCents !== calculation.cohort.medianPriceCents) {
+    throw new Error("Market assessment does not match its cohort");
+  }
+  if (market.status !== "available" && (market.discountPercent !== null || market.position !== null)) {
+    throw new Error("Unverified or insufficient market data cannot claim a discount");
+  }
+  if (market.discountPercent !== null && !Number.isFinite(market.discountPercent)) {
+    throw new Error("Market discount must be finite");
   }
   if (calculation.cohort.candidateCount !==
       calculation.cohort.members.length + calculation.cohort.excludedOutlierListingIds.length) {
     throw new Error("Comparable candidate count is inconsistent");
   }
   const sufficient = calculation.cohort.members.length >= MINIMUM_COMPARABLES;
-  if ((calculation.score.marketDataStatus === "sufficient") !== sufficient ||
-      calculation.score.marketDataStatus !== calculation.cohort.marketDataStatus) {
-    throw new Error("Deal score market-data status is inconsistent");
+  if ((calculation.cohort.marketDataStatus === "sufficient") !== sufficient ||
+      (market.status === "available" && !sufficient) ||
+      (market.status === "insufficient_data" && sufficient)) {
+    throw new Error("Market-data status is inconsistent");
   }
 }
 
@@ -237,10 +210,13 @@ function parseCriteria(json: string): ComparableCohortCriteria {
   return value as ComparableCohortCriteria;
 }
 
-function parseComponents(json: string): DealScoreComponent[] {
-  const value: unknown = JSON.parse(json);
-  if (!Array.isArray(value)) throw new Error("Stored deal score components are invalid");
-  return value as DealScoreComponent[];
+function parseAssessment(json: string, version: number): DealScore {
+  const value = JSON.parse(json) as DealScore;
+  if (version !== DEAL_SCORE_VERSION || value?.version !== DEAL_SCORE_VERSION ||
+      value.marketValue === undefined || value.personalFit === undefined || value.confidence === undefined) {
+    throw new Error("Stored assessment version is invalid");
+  }
+  return value;
 }
 
 function parseIntegerArray(json: string, expectedLength: number, label: string): number[] {

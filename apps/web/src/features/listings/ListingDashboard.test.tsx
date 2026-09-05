@@ -33,6 +33,15 @@ const detail: ListingDetail = {
 };
 
 describe("listing review dashboard", () => {
+  it("requests the selected assessment dimension when applying filters", async () => {
+    const client = mockClient();
+    render(<ListingDashboard client={client} initialListings={[detail]} />);
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Sort listings"), "personal_fit");
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(client.list).toHaveBeenCalledWith({ risk: false, archived: false, sort: "personal_fit" });
+  });
+
   it("explains missing hard facts without presenting a filter failure", async () => {
     const pending: ListingDetail = {
       ...detail, matchStatus: "needs_information",

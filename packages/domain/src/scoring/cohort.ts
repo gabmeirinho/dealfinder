@@ -7,7 +7,8 @@ const MILEAGE_BAND_KM = 40_000;
 export function buildComparableCohort(
   listingId: number,
   subject: VehicleEnrichment,
-  history: readonly ComparableListingInput[]
+  history: readonly ComparableListingInput[],
+  evaluatedAt?: string
 ): ComparableCohort {
   const vehicle = subject.vehicle;
   const criteria = {
@@ -23,8 +24,23 @@ export function buildComparableCohort(
   };
   const canCompare = vehicle.make !== null && vehicle.model !== null && vehicle.year !== null &&
     vehicle.mileageKm !== null && vehicle.fuel !== null && vehicle.transmission !== null;
+  const subjectGroup = history.find((candidate) => candidate.listingId === listingId)?.duplicateGroupId;
+  const seenVehicles = new Set<string>();
   const candidates = canCompare
-    ? history.filter((candidate) => candidate.listingId !== listingId && isComparable(subject, candidate))
+    ? history.filter((candidate) => candidate.listingId !== listingId &&
+        (subjectGroup === undefined || candidate.duplicateGroupId !== subjectGroup) &&
+        (evaluatedAt === undefined || candidate.lastSeenAt === undefined ||
+          (Date.parse(candidate.lastSeenAt) <= Date.parse(evaluatedAt) &&
+           Date.parse(evaluatedAt) - Date.parse(candidate.lastSeenAt) <= 90 * 86_400_000)) &&
+        isComparable(subject, candidate))
+      .sort((left, right) => (right.lastSeenAt ?? "").localeCompare(left.lastSeenAt ?? "") || left.listingId - right.listingId)
+      .filter((candidate) => {
+        const identity = candidate.duplicateGroupId === undefined
+          ? `listing:${candidate.listingId}` : `group:${candidate.duplicateGroupId}`;
+        if (seenVehicles.has(identity)) return false;
+        seenVehicles.add(identity);
+        return true;
+      })
       .map((candidate) => ({
         listingId: candidate.listingId,
         priceCents: candidate.enrichment.price.amountCents as number
@@ -86,7 +102,7 @@ function excludePriceOutliers<T extends { priceCents: number }>(candidates: read
   return candidates.filter(({ priceCents }) => priceCents >= minimum && priceCents <= maximum);
 }
 
-function percentile(sorted: readonly number[], fraction: number): number {
+export function percentile(sorted: readonly number[], fraction: number): number {
   if (sorted.length === 0) return 0;
   const position = (sorted.length - 1) * fraction;
   const lower = Math.floor(position);

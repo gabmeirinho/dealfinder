@@ -44,7 +44,8 @@ describe("deal scores repository", () => {
       ...calculation
     });
     expect(stored.cohort.excludedOutlierListingIds).toEqual([setup.listingIds[6]]);
-    expect(stored.score.components).toHaveLength(6);
+    expect(stored.score).not.toHaveProperty("total");
+    expect(stored.score.marketValue.askingPriceRange).toEqual({ lowerCents: 2_100_000, upperCents: 2_300_000 });
   });
 
   it("replaces prior recomputation instead of accumulating stale membership", () => {
@@ -70,7 +71,7 @@ describe("deal scores repository", () => {
     expect(stored).toMatchObject({
       scoredAt: later,
       cohort: { marketDataStatus: "insufficient" },
-      score: { comparableCount: 4, discountPercent: null }
+      score: { marketValue: { comparableCount: 4, discountPercent: null } }
     });
     expect(stored?.cohort.members).toHaveLength(4);
     expect(testDatabase.connection.database.prepare(`

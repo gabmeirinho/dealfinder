@@ -6,6 +6,7 @@ import { createVehicleSearchDraft, type FuelType, type VehicleEnrichment } from 
 import { CorrectionsService } from "../corrections/index.js";
 import { ListingIngestionService } from "../listings/index.js";
 import { DealScoringService } from "./service.js";
+import { ListingReviewService } from "../workflow/service.js";
 
 const SCORED_AT = "2026-08-23T12:00:00.000Z";
 
@@ -13,6 +14,19 @@ describe("deal scoring service", () => {
   let database: DatabaseConnection | undefined;
 
   afterEach(() => database?.close());
+
+  it("sorts market value independently from personal fit", () => {
+    const setup = seed([19_000, 20_000, 21_000, 22_000, 23_000, 24_000]);
+    database = setup.database;
+    new CorrectionsService(() => setup.database).correct({
+      listingId: setup.listingIds[0]!, field: "sellerType", value: "private", correctedAt: SCORED_AT
+    });
+    new DealScoringService({ database: () => setup.database }).recomputeAll(SCORED_AT);
+    const workflow = new ListingReviewService(() => setup.database);
+    expect(workflow.list({ sort: "market_value" })[0]).toMatchObject({ id: setup.listingIds[0] });
+    expect(workflow.list({ sort: "personal_fit" }).at(-1)).toMatchObject({ id: setup.listingIds[0] });
+    expect(workflow.list({ sort: "confidence" })).toHaveLength(6);
+  });
 
   it("persists explainable components from enriched history, preferences, freshness, and distance", () => {
     const setup = seed([22_000, 20_000, 21_000, 22_000, 23_000, 24_000, 100_000], true);
@@ -40,18 +54,13 @@ describe("deal scoring service", () => {
       excludedOutlierListingIds: [setup.listingIds[6]]
     });
     expect(subject.cohort.members).toHaveLength(5);
-    expect(subject.score).toMatchObject({
-      total: 62,
-      confidence: "medium",
-      discountPercent: 0,
-      comparableCount: 5,
-      marketDataLabel: "Market data available"
+    expect(subject.score.marketValue).toMatchObject({
+      status: "available", discountPercent: 0, comparableCount: 5,
+      askingPriceRange: { lowerCents: 2_100_000, upperCents: 2_300_000 }
     });
-    expect(subject.score.components.map(({ key }) => key)).toEqual([
-      "price_position", "preferences", "freshness", "distance", "data_completeness", "risk"
-    ]);
-    expect(subject.score.components.find(({ key }) => key === "distance")?.explanation)
-      .toBe("Nationwide search; distance is not used");
+    expect(subject.score.confidence.level).toBe("medium");
+    expect(subject.score.personalFit.percent).toBe(100);
+    expect(subject.score.personalFit.distance?.label).toBe("Nationwide search · distance not used");
   });
 
   it("stores insufficient market data during cold start and recomputes stably", () => {
@@ -64,11 +73,8 @@ describe("deal scoring service", () => {
 
     expect(first).toEqual(second);
     expect(first[0]?.score).toMatchObject({
-      confidence: "low",
-      marketDataStatus: "insufficient",
-      marketDataLabel: "Insufficient market data",
-      medianPriceCents: null,
-      discountPercent: null
+      confidence: { level: "low" },
+      marketValue: { status: "insufficient_data", medianPriceCents: null, discountPercent: null }
     });
   });
 
@@ -78,10 +84,9 @@ describe("deal scoring service", () => {
     const score = new DealScoringService({ database: () => setup.database })
       .recomputeListing(setup.listingIds[0]!, SCORED_AT)[0]!;
 
-    expect(score.score.discountPercent).toBeGreaterThan(90);
-    expect(score.score.confidence).toBe("low");
-    expect(score.score.total).toBeLessThanOrEqual(59);
-    expect(score.score.components.find(({ key }) => key === "risk")).toMatchObject({ points: -30 });
+    expect(score.score.marketValue).toMatchObject({ status: "verify_price", discountPercent: null });
+    expect(score.score.confidence.level).toBe("low");
+    expect(score.score).not.toHaveProperty("total");
   });
 
   it("lets human corrections override AI facts and remove an ineligible score", () => {
@@ -137,15 +142,15 @@ describe("deal scoring service", () => {
     expect(database.dealScores.get(listingId, setup.searchId)).toBeDefined();
   });
 
-  it("does not recompute downstream scores while credit processing is paused", () => {
+  it("recomputes deterministic assessments even while AI credit is paused", () => {
     const setup = seed([22_000]);
     database = setup.database;
     database.database.prepare(`
       UPDATE processing_control SET state = 'credit_paused', paused_at = ? WHERE singleton_id = 1
     `).run(SCORED_AT);
 
-    expect(new DealScoringService({ database: () => setup.database }).recomputeAll(SCORED_AT)).toEqual([]);
-    expect(database.dealScores.listRanked(setup.searchId)).toEqual([]);
+    expect(new DealScoringService({ database: () => setup.database }).recomputeAll(SCORED_AT)).toHaveLength(1);
+    expect(database.dealScores.listRanked(setup.searchId)).toHaveLength(1);
   });
 });
 
