@@ -17,27 +17,33 @@ export function groupProbableDuplicates(
       if (pair !== null) pairs.push(pair);
     }
   }
-  const parent = new Map(sorted.map(({ listingId }) => [listingId, listingId]));
-  const find = (id: number): number => {
-    const direct = parent.get(id) as number;
-    if (direct === id) return id;
-    const root = find(direct);
-    parent.set(id, root);
-    return root;
-  };
-  for (const pair of pairs) {
-    const leftRoot = find(pair.leftListingId);
-    const rightRoot = find(pair.rightListingId);
-    if (leftRoot !== rightRoot) parent.set(Math.max(leftRoot, rightRoot), Math.min(leftRoot, rightRoot));
+  const directEvidence = new Set(pairs.map((pair) => pairKey(
+    pair.leftListingId,
+    pair.rightListingId
+  )));
+  const groups = new Map(sorted.map(({ listingId }) => [listingId, new Set([listingId])]));
+  const groupByListing = new Map(sorted.map(({ listingId }) => [listingId, listingId]));
+  const strongestFirst = [...pairs].sort(compareEvidenceStrength);
+  for (const pair of strongestFirst) {
+    const leftGroupId = groupByListing.get(pair.leftListingId) as number;
+    const rightGroupId = groupByListing.get(pair.rightListingId) as number;
+    if (leftGroupId === rightGroupId) continue;
+    const leftGroup = groups.get(leftGroupId) as Set<number>;
+    const rightGroup = groups.get(rightGroupId) as Set<number>;
+    // Complete-link grouping: every cross-group member must have direct evidence.
+    // This prevents A≈B and B≈C from implying A≈C.
+    if (![...leftGroup].every((leftId) => [...rightGroup].every((rightId) =>
+      directEvidence.has(pairKey(leftId, rightId))
+    ))) continue;
+    const mergedId = Math.min(leftGroupId, rightGroupId);
+    const removedId = Math.max(leftGroupId, rightGroupId);
+    const merged = new Set([...leftGroup, ...rightGroup]);
+    groups.set(mergedId, merged);
+    groups.delete(removedId);
+    for (const listingId of merged) groupByListing.set(listingId, mergedId);
   }
-  const membersByRoot = new Map<number, number[]>();
-  for (const { listingId } of sorted) {
-    const root = find(listingId);
-    const members = membersByRoot.get(root);
-    if (members === undefined) membersByRoot.set(root, [listingId]);
-    else members.push(listingId);
-  }
-  return [...membersByRoot.values()]
+  return [...groups.values()]
+    .map((members) => [...members].sort((left, right) => left - right))
     .filter((members) => members.length > 1)
     .map((members) => {
       const memberSet = new Set(members);
@@ -54,6 +60,19 @@ export function groupProbableDuplicates(
       };
     })
     .sort((left, right) => left.memberListingIds[0]! - right.memberListingIds[0]!);
+}
+
+function pairKey(leftId: number, rightId: number): string {
+  return leftId < rightId ? `${leftId}:${rightId}` : `${rightId}:${leftId}`;
+}
+
+function compareEvidenceStrength(left: DuplicatePairEvidence, right: DuplicatePairEvidence): number {
+  const confidence = Number(right.confidence === "high") - Number(left.confidence === "high");
+  const image = (right.imageSimilarity ?? -1) - (left.imageSimilarity ?? -1);
+  const vehicle = right.vehicleSimilarity - left.vehicleSimilarity;
+  const text = right.textSimilarity - left.textSimilarity;
+  return confidence || image || vehicle || text ||
+    left.leftListingId - right.leftListingId || left.rightListingId - right.rightListingId;
 }
 
 function comparePair(

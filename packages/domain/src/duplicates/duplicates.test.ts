@@ -57,6 +57,32 @@ describe("duplicate fingerprints and grouping", () => {
     ])).toEqual([]);
   });
 
+  it("does not merge a duplicate chain without direct evidence between every member", () => {
+    const bridge = Array.from({ length: 10 }, (_, index) => `bridge${index + 1}`);
+    const groups = groupProbableDuplicates([
+      candidate(1, { textTokens: [...bridge.slice(0, 8), "left1", "left2"] }),
+      candidate(2, { textTokens: bridge }),
+      candidate(3, { textTokens: [...bridge.slice(2), "right1", "right2"] })
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({
+      memberListingIds: [1, 2],
+      pairEvidence: [expect.objectContaining({ leftListingId: 1, rightListingId: 2 })]
+    });
+    expect(groups[0]?.pairEvidence).not.toContainEqual(
+      expect.objectContaining({ leftListingId: 2, rightListingId: 3 })
+    );
+  });
+
+  it("allows a larger group when every member has direct pair evidence", () => {
+    const groups = groupProbableDuplicates([candidate(1), candidate(2), candidate(3)]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ memberListingIds: [1, 2, 3] });
+    expect(groups[0]?.pairEvidence).toHaveLength(3);
+  });
+
   it("never groups a materially different vehicle from image similarity alone", () => {
     expect(groupProbableDuplicates([
       candidate(1, { imageDifferenceHash: "ffffffffffffffff" }),
