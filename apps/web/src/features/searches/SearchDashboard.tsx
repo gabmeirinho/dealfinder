@@ -306,6 +306,19 @@ export function SearchDashboard({
     }
   };
 
+  const scanStandvirtual = async (search: ManagedVehicleSearch): Promise<void> => {
+    setPending(true);
+    setError(null);
+    try {
+      const report = await client.scanStandvirtual(search.id);
+      setNotice(`Standvirtual collected ${report.collected} market listings for ${search.name}; ${report.eligible} passed your personal filters and ${report.scoresCalculated} were scored.`);
+    } catch (scanError: unknown) {
+      setError(messageFor(scanError, "The Standvirtual scan could not be completed."));
+    } finally {
+      setPending(false);
+    }
+  };
+
   const openVerification = async (search: ManagedVehicleSearch): Promise<void> => {
     setPending(true);
     setError(null);
@@ -425,6 +438,7 @@ export function SearchDashboard({
               onDelete={() => confirmDelete(search)}
               onScan={() => void requestScan(search)}
               onDeepScan={() => void requestScan(search, "deep")}
+              onStandvirtual={() => void scanStandvirtual(search)}
               onVerify={() => void openVerification(search)}
               onMove={(direction) => void moveSearch(index, direction)}
             />
@@ -481,6 +495,7 @@ interface SearchRowProps {
   onDelete(): void;
   onScan(): void;
   onDeepScan(): void;
+  onStandvirtual(): void;
   onVerify(): void;
   onMove(direction: -1 | 1): void;
 }
@@ -547,6 +562,7 @@ function SearchRow(props: SearchRowProps): ReactElement {
           <Icon name="scan" /> Scan
         </button>
         <button type="button" onClick={props.onDeepScan} disabled={props.pending || !search.active} title="Ignore the first-scan cap and known-listing threshold; maximum cards and collection time still apply">Deep scan</button>
+        <button className="standvirtual-action" type="button" onClick={props.onStandvirtual} disabled={props.pending || !search.active || search.criteria.modelTarget == null} title={search.criteria.modelTarget == null ? "Add an explicit model target before scanning Standvirtual" : "Collect up to 100 uncapped market listings; your saved budget is applied only to personal eligibility"}>Scan Standvirtual</button>
         <button type="button" onClick={props.onToggle} disabled={props.pending}>
           <Icon name={search.active ? "pause" : "play"} /> {search.active ? "Pause" : "Activate"}
         </button>

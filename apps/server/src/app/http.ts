@@ -26,6 +26,7 @@ import { handleDuplicateGroupsRequest } from "../modules/duplicates/index.js";
 import { handleListingReviewRequest } from "../modules/listings/api/index.js";
 import type { ListingReviewService } from "../modules/workflow/index.js";
 import type { ListingDetailCaptureService } from "../modules/listings/detail-enrichment/index.js";
+import { handleStandvirtualRequest, type StandvirtualScanner } from "../sources/standvirtual/index.js";
 
 export interface HttpServerOptions {
   database: () => DatabaseConnection;
@@ -36,6 +37,7 @@ export interface HttpServerOptions {
   deepseek?: () => DeepSeekCreditController;
   listingWorkflow?: () => ListingReviewService;
   listingDetailCapture?: () => ListingDetailCaptureService;
+  standvirtual?: () => StandvirtualScanner;
   staticDirectory?: string;
   now?: () => Date;
 }
@@ -128,6 +130,11 @@ export function createHttpServer(options: HttpServerOptions): Server {
             : { listingDetailCapture: options.listingDetailCapture }),
           now
         })
+      ) return;
+
+      if (
+        options.standvirtual !== undefined &&
+        await handleStandvirtualRequest(request, response, url, { scanner: options.standvirtual })
       ) return;
 
       if (await handleSearchesRequest(request, response, url, {

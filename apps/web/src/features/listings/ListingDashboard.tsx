@@ -37,6 +37,7 @@ interface AppliedListingFilters {
   riskOnly: boolean;
   archived: boolean;
   sort: ListingSort;
+  source: "all" | "facebook" | "standvirtual";
 }
 
 export function ListingDashboard({
@@ -61,13 +62,15 @@ export function ListingDashboard({
   const [riskOnly, setRiskOnly] = useState(false);
   const [sort, setSort] = useState<ListingSort>("recent");
   const [archived, setArchived] = useState(false);
+  const [source, setSource] = useState<AppliedListingFilters["source"]>("all");
   const [appliedFilters, setAppliedFilters] = useState<AppliedListingFilters>({
     searchId: "",
     state: "all",
     query: "",
     riskOnly: false,
     archived: false,
-    sort: "recent"
+    sort: "recent",
+    source: "all"
   });
   const [loading, setLoading] = useState(initialListings === undefined);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +88,8 @@ export function ListingDashboard({
         ...(appliedFilters.query === "" ? {} : { query: appliedFilters.query }),
         risk: appliedFilters.riskOnly,
         archived: appliedFilters.archived,
-        ...(appliedFilters.sort === "recent" ? {} : { sort: appliedFilters.sort })
+        ...(appliedFilters.sort === "recent" ? {} : { sort: appliedFilters.sort }),
+        ...(appliedFilters.source === "all" ? {} : { source: appliedFilters.source })
       });
       if (requestId !== latestRequest.current) return;
       setListings(next);
@@ -136,11 +140,12 @@ export function ListingDashboard({
 
       <form className="listing-filters" onSubmit={(event) => {
         event.preventDefault();
-        setAppliedFilters({ searchId, state, query: query.trim(), riskOnly, archived, sort });
+        setAppliedFilters({ searchId, state, query: query.trim(), riskOnly, archived, sort, source });
       }}>
         <label><span>Model / saved search</span><select value={searchId} onChange={(event) => setSearchId(event.target.value)}><option value="">All models and searches</option>{searches.map((search) => <option key={search.id} value={search.id}>{search.name}</option>)}</select></label>
         <label><span>Find a car</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Make, model, or listing text" /></label>
         <label><span>Workflow</span><select value={state} onChange={(event) => setState(event.target.value as ListingReviewState | "all")}><option value="all">All active states</option>{WORKFLOW.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+        <label><span>Source</span><select value={source} onChange={(event) => setSource(event.target.value as AppliedListingFilters["source"])}><option value="all">All sources</option><option value="standvirtual">Standvirtual</option><option value="facebook">Facebook</option></select></label>
         <label className="review-check"><input type="checkbox" checked={riskOnly} onChange={(event) => setRiskOnly(event.target.checked)} /><span>High-risk only</span></label>
         <label className="review-check"><input type="checkbox" checked={archived} onChange={(event) => setArchived(event.target.checked)} /><span>Archived</span></label>
         <label><span>Sort listings</span><select value={sort} onChange={(event) => setSort(event.target.value as ListingSort)}><option value="recent">Recently seen</option><option value="market_value">Market discount</option><option value="personal_fit">Personal fit</option><option value="confidence">Valuation confidence</option></select></label>
@@ -168,7 +173,7 @@ function ListingRow({ listing, active, onOpen }: { listing: ListingSummary; acti
     <li className={`listing-inbox-row ${active ? "is-selected" : ""} ${listing.risk?.reasons.length ? "is-risk" : ""}`}>
       <button type="button" onClick={onOpen} aria-label={`Review ${listing.title}`}>
         <span className="listing-score">{listing.score?.marketValue.discountPercent == null ? "—" : `${Math.abs(listing.score.marketValue.discountPercent)}%`}<small>{listing.score?.marketValue.discountPercent == null ? "market" : listing.score.marketValue.discountPercent >= 0 ? "below median" : "above median"}</small></span>
-        <span className="listing-row-main"><strong>{identity || listing.title}</strong><span>{listing.displayedPrice ?? "Price unknown"} · {listing.location ?? "Location unknown"}</span><small>Seen {formatDate(listing.lastSeenAt)} · {listing.matchStatus === "needs_information" ? "Needs more information" : listing.processing?.state ?? "not processed"}</small><span className="listing-assessment-summary">{marketLabel(listing.score?.marketValue)}<br />Personal fit: {fitLabel(listing.score?.personalFit)} · Confidence: {listing.score?.confidence.level ?? "not assessed"}</span>{listing.assessmentSearchName ? <small>For {listing.assessmentSearchName}</small> : null}</span>
+        <span className="listing-row-main"><strong>{identity || listing.title}</strong><span>{listing.displayedPrice ?? "Price unknown"} · {listing.location ?? "Location unknown"}</span><small><span className={`listing-source source-${listing.source}`}>{sourceLabel(listing.source)}</span> · Seen {formatDate(listing.lastSeenAt)} · {listing.matchStatus === "needs_information" ? "Needs more information" : listing.processing?.state ?? "not processed"}</small><span className="listing-assessment-summary">{marketLabel(listing.score?.marketValue)}<br />Personal fit: {fitLabel(listing.score?.personalFit)} · Confidence: {listing.score?.confidence.level ?? "not assessed"}</span>{listing.assessmentSearchName ? <small>For {listing.assessmentSearchName}</small> : null}</span>
         <span className={`workflow-badge state-${listing.review.state}`}>{labelState(listing.review.state)}</span>
         {listing.risk?.reasons.length ? <span className="risk-stamp">{listing.risk.reasons[0]?.label}</span> : null}
       </button>
@@ -211,7 +216,7 @@ function ListingInspector({ listing, client, onChange, onClose, onError }: {
 
   return (
     <article className="listing-inspector" aria-labelledby="listing-detail-title">
-      <header className="inspector-header"><div><span className={`workflow-badge state-${listing.review.state}`}>{labelState(listing.review.state)}</span><h2 id="listing-detail-title">{listing.title}</h2><p>{listing.displayedPrice ?? "Price unknown"} · {listing.location ?? "Location unknown"}</p></div><button className="secondary-action" type="button" onClick={onClose}>Close</button></header>
+      <header className="inspector-header"><div><span className={`workflow-badge state-${listing.review.state}`}>{labelState(listing.review.state)}</span><h2 id="listing-detail-title">{listing.title}</h2><p>{sourceLabel(listing.source)} · {listing.displayedPrice ?? "Price unknown"} · {listing.location ?? "Location unknown"}</p></div><button className="secondary-action" type="button" onClick={onClose}>Close</button></header>
 
       {listing.risk?.reasons.map((risk) => <aside className="listing-risk" key={risk.code}><strong>{risk.label}</strong><span>{risk.explanation}</span></aside>)}
 
@@ -219,7 +224,7 @@ function ListingInspector({ listing, client, onChange, onClose, onError }: {
 
       <section className="fact-comparison"><header><h3>Vehicle facts</h3><button className="text-action" type="button" onClick={() => setCorrectionOpen((open) => !open)}>{correctionOpen ? "Close correction" : "Correct a fact"}</button></header>{mileageSources?.conflict ? <aside className="listing-risk"><strong>Mileage conflict</strong><span>Facebook structured data says {formatMileage(mileageSources.structuredKm)}; {mileageSources.descriptionKm === null ? "the result card" : "the seller description"} says {formatMileage(mileageSources.descriptionKm ?? mileageSources.cardKm)}. The structured value is selected, but verify it.</span></aside> : null}<FactTable original={listing.normalizedFacts} effective={listing.effectiveFacts} corrections={new Set(listing.corrections.map(({ field }) => field))} />{mileageSources?.source === "facebook_structured" && !mileageSources.conflict ? <p className="muted-copy">Mileage selected from Facebook structured listing data.</p> : null}{correctionOpen ? <CorrectionForm listing={listing} client={client} onChange={onChange} onError={onError} /> : null}</section>
 
-      <section className="original-copy"><h3>Original listing text</h3><h4>{listing.original.title}</h4>{listing.original.description === null ? <><p className="muted-copy">{listing.detailFacts === null ? "No description or Facebook vehicle metadata has been captured." : "No seller description was available, but Facebook vehicle metadata was captured."}</p>{listing.detailFacts === null ? <button className="secondary-action" type="button" disabled={busy} onClick={() => void mutate(() => client.captureDescription(listing.id))}>Capture Facebook details</button> : null}</> : <p>{listing.original.description}</p>}<ul>{listing.original.cardFacts.map((fact, index) => <li key={`${fact}-${index}`}>{fact}</li>)}</ul>{listing.sourceUrl !== null ? <a href={listing.sourceUrl} target="_blank" rel="noopener noreferrer">Open source listing</a> : <p className="muted-copy">Source URL was blocked because it was not a safe Facebook HTTPS URL.</p>}</section>
+      <section className="original-copy"><h3>Original listing text</h3><h4>{listing.original.title}</h4>{listing.original.description === null ? <><p className="muted-copy">{listing.source === "facebook" ? (listing.detailFacts === null ? "No description or Facebook vehicle metadata has been captured." : "No seller description was available, but Facebook vehicle metadata was captured.") : "Standvirtual did not provide a seller description in the collected result card."}</p>{listing.source === "facebook" && listing.detailFacts === null ? <button className="secondary-action" type="button" disabled={busy} onClick={() => void mutate(() => client.captureDescription(listing.id))}>Capture Facebook details</button> : null}</> : <p>{listing.original.description}</p>}<ul>{listing.original.cardFacts.map((fact, index) => <li key={`${fact}-${index}`}>{fact}</li>)}</ul>{listing.sourceUrl !== null ? <a href={listing.sourceUrl} target="_blank" rel="noopener noreferrer">Open {sourceLabel(listing.source)} listing</a> : <p className="muted-copy">The source URL was blocked because it did not match the expected secure marketplace URL.</p>}</section>
 
       <DealAssessment listing={listing} />
 
@@ -251,3 +256,4 @@ function formatEur(cents: number): string { return new Intl.NumberFormat("en-IE"
 function formatDate(value: string): string { return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value)); }
 function priceDelta(current: number, previous: number): string { const difference = current - previous; return `${difference <= 0 ? "Down" : "Up"} ${formatEur(Math.abs(difference))}`; }
 function labelState(state: ListingReviewState): string { return WORKFLOW.find(({ value }) => value === state)?.label ?? state; }
+function sourceLabel(source: ListingSummary["source"]): string { return source === "standvirtual" ? "Standvirtual" : "Facebook"; }

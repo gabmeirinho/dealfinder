@@ -38,6 +38,16 @@ export interface SearchApiClient {
   delete(id: string): Promise<void>;
   reprioritize(searchIds: readonly string[]): Promise<ManagedVehicleSearch[]>;
   requestScan(id: string, mode?: ScanMode): Promise<ScanQueueReceipt>;
+  scanStandvirtual(id: string): Promise<StandvirtualScanReport>;
+}
+
+export interface StandvirtualScanReport {
+  searchId: string;
+  collected: number;
+  eligible: number;
+  pagesScanned: number;
+  stopReason: string;
+  scoresCalculated: number;
 }
 
 export function createSearchApiClient(request: typeof fetch = fetch): SearchApiClient {
@@ -109,7 +119,15 @@ export function createSearchApiClient(request: typeof fetch = fetch): SearchApiC
       request,
       `/api/searches/${encodeURIComponent(id)}/scan`,
       { method: "POST", body: JSON.stringify({ mode }) }
-    )
+    ),
+    scanStandvirtual: async (id) => {
+      const body = await send<{ report: StandvirtualScanReport }>(
+        request,
+        `/api/searches/${encodeURIComponent(id)}/standvirtual/scan`,
+        { method: "POST" }
+      );
+      return body.report;
+    }
   };
 }
 

@@ -1,10 +1,11 @@
-import type { DatabaseConnection, StoredDealScore, StoredEnrichment } from "@dealfinder/db";
+import type { DatabaseConnection, StoredDealScore, StoredEnrichment, StoredNormalizedVehicle } from "@dealfinder/db";
 import {
   applyAuthoritativeStructuredFacts,
   applyFactCorrections,
   assessVehicleRisk,
   calculateDealScore,
   evaluateVehicleMatch,
+  enrichmentFromNormalizedFacts,
   type ComparableListingInput,
   type NormalizedFactField,
   type NormalizedVehicleFacts,
@@ -34,8 +35,10 @@ export class DealScoringService {
   public recomputeAll(scoredAt: string): StoredDealScore[] {
     validateTimestamp(scoredAt, "Scored at");
     const database = this.#database();
-    const resolved = database.enrichmentProcessing.listEnrichments()
-      .map((stored) => resolveListing(database, stored))
+    const enrichments = new Map(database.enrichmentProcessing.listEnrichments()
+      .map((stored) => [stored.listingId, stored]));
+    const resolved = database.normalizedVehicles.listFacts()
+      .map((normalized) => resolveListing(database, normalized, enrichments.get(normalized.listingId)))
       .filter((listing): listing is ResolvedListing => listing !== undefined);
     const history = marketplaceHistory(database, resolved);
     return resolved.flatMap((subject) => this.recomputeSubject(subject, history, scoredAt));
@@ -44,8 +47,10 @@ export class DealScoringService {
   public recomputeListing(listingId: number, scoredAt: string): StoredDealScore[] {
     validateTimestamp(scoredAt, "Scored at");
     const database = this.#database();
-    const resolved = database.enrichmentProcessing.listEnrichments()
-      .map((stored) => resolveListing(database, stored))
+    const enrichments = new Map(database.enrichmentProcessing.listEnrichments()
+      .map((stored) => [stored.listingId, stored]));
+    const resolved = database.normalizedVehicles.listFacts()
+      .map((normalized) => resolveListing(database, normalized, enrichments.get(normalized.listingId)))
       .filter((listing): listing is ResolvedListing => listing !== undefined);
     const subject = resolved.find((listing) => listing.listingId === listingId);
     if (subject === undefined) return [];
@@ -114,27 +119,23 @@ function marketplaceHistory(database: DatabaseConnection, resolved: readonly Res
 
 function resolveListing(
   database: DatabaseConnection,
-  stored: StoredEnrichment
+  normalized: StoredNormalizedVehicle,
+  stored: StoredEnrichment | undefined
 ): ResolvedListing | undefined {
-  const normalized = database.normalizedVehicles.getFacts(stored.listingId);
-  if (normalized === undefined) return undefined;
   // A capture or scan can update facts while another listing finishes enrichment.
   // Do not let that global rescore revive an older interpretation of this listing.
-  if (stored.sourceNormalizedAt < normalized.normalizedAt) {
-    for (const searchId of database.listings.listSearchIds(stored.listingId)) {
-      database.dealScores.delete(stored.listingId, searchId);
-    }
-    return undefined;
-  }
-  const corrections = database.corrections.listForListing(stored.listingId);
+  const enrichmentCurrent = stored !== undefined && stored.sourceNormalizedAt >= normalized.normalizedAt;
+  const corrections = database.corrections.listForListing(normalized.listingId);
   const corrected = new Set<NormalizedFactField>(corrections.map(({ field }) => field));
   const effective = applyFactCorrections(normalized.facts, corrections);
-  const enrichment = resolveEnrichment(
-    stored.enrichment,
-    effective,
-    corrected,
-    database.listingDetailFacts.get(stored.listingId)?.structuredFacts
-  );
+  const enrichment = enrichmentCurrent
+    ? resolveEnrichment(
+        stored.enrichment,
+        effective,
+        corrected,
+        database.listingDetailFacts.get(normalized.listingId)?.structuredFacts
+      )
+    : enrichmentFromNormalizedFacts(effective);
   const facts: NormalizedVehicleFacts = {
     ...effective,
     priceCents: enrichment.price.interpretation === "full_price"
@@ -152,7 +153,7 @@ function resolveListing(
     indicators: { ...enrichment.indicators }
   };
   return {
-    listingId: stored.listingId,
+    listingId: normalized.listingId,
     enrichment,
     facts,
     risk: assessVehicleRisk(facts)

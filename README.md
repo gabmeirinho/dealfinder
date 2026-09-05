@@ -53,13 +53,27 @@ not count as full snapshots for detecting disappeared listings. Each completed r
 stores its stop reason (`initial_limit`, `known_streak`, `card_limit`, `time_limit`,
 `results_end`, or `no_progress`).
 
-## Standvirtual feasibility probe
+## Standvirtual collection and scoring
 
-A standalone experiment tests public Standvirtual result collection without an API.
-It reuses DealFinder's vehicle normalization and exports a JSON report with source
-IDs, canonical listing links, price, vehicle facts, missing fields, and parser
-diagnostics. It does not yet put Standvirtual listings in the inbox, score deals,
-or schedule scans. Facebook continues to use the existing application workflow.
+Saved searches with an explicit make/model target can run a Standvirtual scan from
+the search dashboard. Each scan collects up to 100 newest-first listings without a
+source price cap, associates them with the saved search, normalizes and risk-checks
+them, checks duplicates across sources, and recalculates market value, personal fit,
+and confidence. Hard price criteria such as a €6,000 budget control inbox eligibility
+only; above-budget listings remain available as market evidence. Standvirtual scans
+are currently manual, while Facebook continues to use its scheduler.
+
+The same action is available over the local API:
+
+```text
+POST /api/searches/:searchId/standvirtual/scan
+```
+
+The listing inbox can be filtered with `source=standvirtual` or `source=facebook`.
+
+The standalone probe remains useful for parser diagnostics. It exports a JSON report
+with source IDs, canonical links, normalized facts, missing fields, and collection
+diagnostics without writing to the database.
 
 Run a newest-first collection against a public results URL (up to 20 unique
 listings by default, maximum 100 across paginated result pages):

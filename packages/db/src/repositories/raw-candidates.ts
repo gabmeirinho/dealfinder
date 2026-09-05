@@ -1,12 +1,12 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import { containsSellerIdentityOrContactData } from "@dealfinder/domain";
+import { containsSellerIdentityOrContactData, type ListingSource } from "@dealfinder/domain";
 
 import { withTransaction } from "../transactions.js";
 
 interface CandidateRow {
   id: number;
-  source: "facebook";
+  source: ListingSource;
   source_listing_id: string;
   listing_url: string;
   first_seen_at: string;
@@ -28,7 +28,7 @@ interface ObservationRow {
 
 export interface RawCandidate {
   id: number;
-  source: "facebook";
+  source: ListingSource;
   sourceListingId: string;
   listingUrl: string;
   firstSeenAt: string;
@@ -52,7 +52,7 @@ export interface SaveRawCandidateObservation {
   searchId: string;
   observedAt: string;
   candidate: {
-    source: "facebook";
+    source: ListingSource;
     sourceListingId: string;
     url: string;
     title: string;
@@ -131,7 +131,7 @@ export class RawCandidatesRepository {
     });
   }
 
-  public get(source: "facebook", sourceListingId: string): RawCandidate | undefined {
+  public get(source: ListingSource, sourceListingId: string): RawCandidate | undefined {
     const row = this.database.prepare(`
       SELECT id, source, source_listing_id, listing_url, first_seen_at, last_seen_at
       FROM raw_candidates
@@ -142,6 +142,16 @@ export class RawCandidatesRepository {
 
   public wasSeenInSearch(candidateId: number, searchId: string): boolean {
     return this.database.prepare("SELECT 1 FROM raw_candidate_observations WHERE candidate_id = ? AND search_id = ? LIMIT 1").get(candidateId, searchId) !== undefined;
+  }
+
+  public hasSourceObservations(searchId: string, source: ListingSource): boolean {
+    return this.database.prepare(`
+      SELECT 1
+      FROM raw_candidate_observations observations
+      JOIN raw_candidates candidates ON candidates.id = observations.candidate_id
+      WHERE observations.search_id = ? AND candidates.source = ?
+      LIMIT 1
+    `).get(searchId, source) !== undefined;
   }
 
   public listObservations(candidateId: number): RawCandidateObservation[] {

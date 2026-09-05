@@ -36,6 +36,7 @@ import {
 } from "../modules/duplicates/index.js";
 import { ListingReviewService } from "../modules/workflow/index.js";
 import { ListingDetailCaptureService } from "../modules/listings/detail-enrichment/index.js";
+import { StandvirtualScanner } from "../sources/standvirtual/index.js";
 
 export interface ApplicationOptions {
   config: ServerConfig;
@@ -166,6 +167,12 @@ export function createApplicationRuntime(
     database: getDatabase,
     scanner
   });
+  const standvirtual = new StandvirtualScanner({
+    database: getDatabase,
+    scoring,
+    duplicates: duplicateDetection,
+    processingWake: () => enrichment.wake()
+  });
   const facebookHealth = new FacebookHealthService({
     database: getDatabase,
     browser: () => browser,
@@ -182,6 +189,7 @@ export function createApplicationRuntime(
     deepseek: () => enrichment,
     listingWorkflow: () => listingWorkflow,
     listingDetailCapture: () => listingDetailCapture,
+    standvirtual: () => standvirtual,
     ...(options.staticDirectory === undefined
       ? {}
       : { staticDirectory: options.staticDirectory })

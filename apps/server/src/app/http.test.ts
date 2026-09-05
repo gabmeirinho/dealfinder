@@ -11,6 +11,7 @@ import {
   createHttpServer,
   listenHttpServer
 } from "./http.js";
+import type { StandvirtualScanner } from "../sources/standvirtual/index.js";
 
 describe("localhost HTTP server", () => {
   const cleanup: Array<() => void | Promise<void>> = [];
@@ -113,5 +114,30 @@ describe("localhost HTTP server", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ scores: [] });
+  });
+
+  it("exposes the Standvirtual saved-search scan report", async () => {
+    const database = openDatabase({ filename: ":memory:" });
+    const scanner = {
+      scan: async (searchId: string) => ({
+        searchId, observedAt: "2026-09-05T12:00:00.000Z", collected: 100,
+        eligible: 12, pagesScanned: 3, stopReason: "listing_limit", partialError: null,
+        observationsInserted: 100, listingsCreated: 100, priceChanges: 0,
+        scoresCalculated: 12
+      })
+    } as StandvirtualScanner;
+    const server = createHttpServer({ database: () => database, standvirtual: () => scanner });
+    cleanup.push(() => database.close(), () => closeHttpServer(server));
+    const address = await listenHttpServer(server, { host: "127.0.0.1", port: 0 });
+
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/api/searches/search-1/standvirtual/scan`,
+      { method: "POST" }
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      report: { searchId: "search-1", collected: 100, eligible: 12, scoresCalculated: 12 }
+    });
   });
 });

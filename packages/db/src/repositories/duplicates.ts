@@ -4,6 +4,7 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   DUPLICATE_FINGERPRINT_VERSION,
   type DuplicatePairEvidence,
+  type ListingSource,
   type ProbableDuplicateGroup,
   type VehicleDuplicateFingerprint
 } from "@dealfinder/domain";
@@ -41,7 +42,7 @@ interface GroupRow {
 
 interface MemberRow {
   listing_id: number;
-  source: "facebook";
+  source: ListingSource;
   source_listing_id: string;
   listing_url: string;
   title: string;
@@ -85,7 +86,7 @@ export interface StoredThumbnailMetadata extends SaveThumbnailMetadata {
 
 export interface StoredDuplicateMember {
   listingId: number;
-  source: "facebook";
+  source: ListingSource;
   sourceListingId: string;
   listingUrl: string;
   title: string;
