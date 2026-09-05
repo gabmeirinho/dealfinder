@@ -12,6 +12,33 @@ describe("Facebook scanner", () => {
 
   afterEach(() => database?.close());
 
+  it("waits through a blank at-end shell and collects cards when they render", async () => {
+    const setup = createSetup();
+    database = setup.database;
+    const browser = new FakeScanBrowser([
+      { cards: [], atEnd: true, page: marketplacePage("") },
+      { cards: [card(1)], atEnd: true, page: marketplacePage("Marketplace results") }
+    ]);
+    const scanner = new FacebookScanner({ database: () => setup.database, browser: () => browser });
+    await expect(scanner.scan(setup.searchId)).resolves.toMatchObject({ cardsSeen: 1, stopReason: "results_end" });
+    expect(browser.scrolls).toBe(1);
+  });
+
+  it("pauses only the affected search when a blank shell never renders", async () => {
+    const setup = createSetup();
+    database = setup.database;
+    const browser = new FakeScanBrowser([{ cards: [], atEnd: true, page: marketplacePage("") }]);
+    const failures: Array<{ kind: string; scope: string }> = [];
+    const scanner = new FacebookScanner({
+      database: () => setup.database, browser: () => browser,
+      failures: { pause: async (_id, failure) => { failures.push(failure); return { id: "partial" }; } }
+    });
+    await expect(scanner.scan(setup.searchId)).rejects.toMatchObject({ code: "FACEBOOK_PARTIAL_LOAD" });
+    expect(failures).toMatchObject([{ kind: "partial_load", scope: "search" }]);
+    expect(browser.scrolls).toBe(1);
+    expect(setup.database.scanRuns.hasSucceeded(setup.searchId)).toBe(false);
+  });
+
   it("caps an initial scan at 300 cards", async () => {
     const setup = createSetup();
     database = setup.database;

@@ -14,10 +14,19 @@ const cases = [
   ["rate-limit.html", "rate_limited", "source", "https://www.facebook.com/marketplace/", false, 0],
   ["empty.html", "empty_results", "search", "https://www.facebook.com/marketplace/", false, 0],
   ["partial.html", "partial_load", "search", "https://www.facebook.com/marketplace/", true, 2],
-  ["selector.html", "selector_contract", "source", "https://www.facebook.com/marketplace/", false, 2]
+  ["selector.html", "partial_load", "search", "https://www.facebook.com/marketplace/", false, 2]
 ] as const;
 
 describe("Facebook failure classification", () => {
+  it("does not mistake the captured blank Facebook shell for a source-wide selector failure", () => {
+    const snapshot: MarketplaceResultSnapshot = {
+      cards: [], atEnd: true,
+      page: { url: "https://www.facebook.com/marketplace/lisbon/vehicles/", title: "Facebook", bodyText: "", html: "<html><body><div></div></body></html>", loading: false }
+    };
+    expect(classifyFacebookPage(snapshot, { unchangedSnapshots: 0 })).toBeNull();
+    expect(classifyFacebookPage(snapshot, { unchangedSnapshots: 2 })).toMatchObject({ kind: "partial_load", scope: "search" });
+  });
+
   it.each(cases)("classifies %s", (file, kind, scope, url, loading, unchangedSnapshots) => {
     const html = fixture(file);
     const snapshot: MarketplaceResultSnapshot = {

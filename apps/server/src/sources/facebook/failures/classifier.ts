@@ -76,9 +76,11 @@ export function classifyFacebookPage(
   if (
     snapshot.cards.length === 0 &&
     url.includes("/marketplace/") &&
-    (snapshot.atEnd || context.unchangedSnapshots >= 2)
+    context.unchangedSnapshots >= 2
   ) {
-    return selectorContractFailure();
+    // An empty client-side shell is not evidence that card selectors changed.
+    // Only an observed card that violates the parser contract warrants a source pause.
+    return failure("partial_load", "search", "Marketplace did not render listing cards or an explicit empty-results message");
   }
   return null;
 }

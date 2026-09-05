@@ -164,7 +164,10 @@ export class FacebookScanner {
         });
         if (stalledFailure !== null) await this.pause(searchId, stalledFailure, snapshot);
 
-        if (snapshot.atEnd) {
+        // A short, blank client-side document is also geometrically at its end.
+        // Give it another bounded snapshot instead of recording a complete scan.
+        const unresolvedEmptyPage = snapshot.cards.length === 0 && snapshot.page !== undefined;
+        if (snapshot.atEnd && !unresolvedEmptyPage && !snapshot.page?.loading) {
           phase = "ingestion";
           return await this.commit(searchId, observedAt, staged, {
             cardsSeen, newCandidates, initialScan, stopReason: "results_end"
