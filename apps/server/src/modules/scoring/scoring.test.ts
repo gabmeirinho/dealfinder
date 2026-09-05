@@ -15,6 +15,29 @@ describe("deal scoring service", () => {
 
   afterEach(() => database?.close());
 
+  it("uses only the selected model search for visibility and assessment", () => {
+    const setup = seed([19_000, 20_000]);
+    database = setup.database;
+    const draft = createVehicleSearchDraft("Private BMW 320d");
+    draft.criteria.modelTarget = { strength: "hard", value: { make: "BMW", model: "320d", variant: null } };
+    draft.criteria.sellerPreference = { strength: "soft", value: "private" };
+    const second = database.searches.create(draft);
+    for (const id of setup.listingIds) database.database.prepare("INSERT INTO listing_searches (listing_id, search_id, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?)").run(id, second.id, SCORED_AT, SCORED_AT);
+    new DealScoringService({ database: () => setup.database }).recomputeAll(SCORED_AT);
+    const workflow = new ListingReviewService(() => setup.database);
+    for (const sort of ["recent", "personal_fit", "market_value", "confidence"] as const) {
+      expect(workflow.list({ searchId: second.id, sort })).toMatchObject([
+        { assessmentSearchName: second.name, score: { personalFit: { percent: 0 } } },
+        { assessmentSearchName: second.name, score: { personalFit: { percent: 0 } } }
+      ]);
+    }
+    database.normalizedVehicles.saveMatch(setup.listingIds[0]!, second.id, {
+      status: "excluded", eligible: false, hardFailures: [], missingCriteria: [], softContributions: []
+    }, SCORED_AT);
+    expect(workflow.list({ searchId: second.id })).toHaveLength(1);
+    expect(workflow.list()).toHaveLength(2);
+  });
+
   it("sorts market value independently from personal fit", () => {
     const setup = seed([19_000, 20_000, 21_000, 22_000, 23_000, 24_000]);
     database = setup.database;

@@ -28,6 +28,7 @@ export class SearchApiError extends Error {
 
 export interface SearchApiClient {
   list(): Promise<ManagedVehicleSearch[]>;
+  createModels(drafts: VehicleSearchDraft[], overrideActiveLimit?: boolean): Promise<ManagedVehicleSearch[]>;
   create(draft: VehicleSearchDraft, overrideActiveLimit?: boolean): Promise<ManagedVehicleSearch>;
   update(id: string, draft: VehicleSearchDraft, overrideActiveLimit?: boolean): Promise<ManagedVehicleSearch>;
   duplicate(id: string): Promise<ManagedVehicleSearch>;
@@ -42,6 +43,10 @@ export function createSearchApiClient(request: typeof fetch = fetch): SearchApiC
   return {
     list: async () => {
       const body = await send<{ searches: ManagedVehicleSearch[] }>(request, "/api/searches");
+      return body.searches;
+    },
+    createModels: async (searches, overrideActiveLimit = false) => {
+      const body = await send<{ searches: ManagedVehicleSearch[] }>(request, "/api/searches/models", { method: "POST", body: JSON.stringify({ searches, overrideActiveLimit }) });
       return body.searches;
     },
     create: async (draft, overrideActiveLimit = false) => {

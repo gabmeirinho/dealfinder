@@ -87,6 +87,7 @@ export interface ListingDetail extends ListingSummary {
 export type ListingSort = "recent" | "market_value" | "personal_fit" | "confidence";
 
 export interface ListingFilters {
+  searchId?: string;
   sort?: ListingSort;
   state?: ListingReviewState;
   risk?: boolean;
@@ -114,6 +115,7 @@ export function createListingApiClient(request: typeof fetch = fetch): ListingAp
   return {
     list: async (filters = {}) => {
       const query = new URLSearchParams();
+      if (filters.searchId !== undefined) query.set("searchId", filters.searchId);
       if (filters.sort !== undefined) query.set("sort", filters.sort);
       if (filters.state !== undefined) query.set("state", filters.state);
       if (filters.risk === true) query.set("risk", "true");

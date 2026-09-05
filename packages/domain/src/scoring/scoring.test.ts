@@ -48,6 +48,16 @@ describe("separate deal assessments", () => {
     expect(buildComparableCohort(1, enrichment(), values).members.map((member) => member.listingId)).toEqual([2, 3]);
   });
 
+  it("excludes unknown identities and keeps make/model cohorts separate", () => {
+    const values = [
+      comparable(2, 2_000_000, { make: null }),
+      comparable(3, 2_000_000, { model: null }),
+      comparable(4, 2_000_000, { model: "Another model" }),
+      comparable(5, 2_000_000)
+    ];
+    expect(buildComparableCohort(1, enrichment(), values).members.map((member) => member.listingId)).toEqual([5]);
+  });
+
   it("keeps preferences and distance separate from market value and confidence", () => {
     const input = scoreInput({ marketplaceHistory: history() });
     const original = calculateDealScore(input).score;

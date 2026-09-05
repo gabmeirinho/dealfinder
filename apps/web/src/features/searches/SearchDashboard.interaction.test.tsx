@@ -15,6 +15,28 @@ import { SearchDashboard } from "./SearchDashboard.js";
 afterEach(cleanup);
 
 describe("saved-search dashboard interactions", () => {
+  it("adds multiple model targets with shared filters and individual overrides", async () => {
+    const user = userEvent.setup();
+    const createModels = vi.fn(async (drafts: VehicleSearchDraft[]) => drafts.map((draft, index) => fromDraft(`model-${index}`, draft)));
+    render(<SearchDashboard client={createClient({ createModels })} initialSearches={[]} />);
+    await user.click(screen.getByRole("button", { name: "Add models" }));
+    await user.type(screen.getByLabelText("Make", { exact: true }), "Volkswagen");
+    await user.type(screen.getByLabelText("Model", { exact: true }), "Golf");
+    await user.type(screen.getByLabelText("Maximum EUR", { exact: true }), "20000");
+    await user.click(screen.getByRole("button", { name: "Add another model" }));
+    await user.type(screen.getAllByLabelText("Make", { exact: true })[1]!, "SEAT");
+    await user.type(screen.getAllByLabelText("Model", { exact: true })[1]!, "Leon");
+    await user.click(screen.getAllByText("Override shared budget, year or mileage")[1]!);
+    await user.type(screen.getAllByLabelText("Maximum EUR override")[1]!, "18000");
+    await user.click(screen.getByRole("button", { name: "Create 2 model targets" }));
+    await screen.findByRole("heading", { name: "Volkswagen Golf" });
+    expect(screen.getByRole("heading", { name: "SEAT Leon" })).toBeTruthy();
+    const drafts = createModels.mock.calls[0]![0];
+    expect(drafts.map((draft) => draft.criteria.priceRange?.value.maximumEur)).toEqual([20000, 18000]);
+    expect(drafts.map((draft) => draft.criteria.modelTarget?.value.model)).toEqual(["Golf", "Leon"]);
+    expect(drafts.every((draft) => draft.criteria.modelKeywords === null)).toBe(true);
+  });
+
   it("contains keyboard focus and confirms the active-search override", async () => {
     const user = userEvent.setup();
     const create = vi.fn(async (draft: VehicleSearchDraft, override = false) => {
@@ -125,6 +147,7 @@ function rowFor(name: string): HTMLElement {
 function createClient(overrides: Partial<SearchApiClient>): SearchApiClient {
   return {
     list: async () => [],
+    createModels: async () => [],
     create: async (draft) => fromDraft("created", draft),
     update: async (id, draft) => fromDraft(id, draft),
     duplicate: async () => managedSearch("duplicate", "Duplicate", 2),

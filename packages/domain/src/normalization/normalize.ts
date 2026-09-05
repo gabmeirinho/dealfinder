@@ -201,7 +201,10 @@ function findMakeModelVariant(title: string): {
   const match = normalized.match(matched[0]);
   const remainder = normalized.slice((match?.index ?? 0) + (match?.[0].length ?? 0)).trim();
   const tokens = remainder.split(/\s+/u).filter(Boolean);
-  const model = cleanVehicleToken(tokens.shift() ?? null);
+  const firstToken = tokens.shift() ?? null;
+  const model = matched[1] === "Tesla" && firstToken?.toLowerCase() === "model" && /^(?:3|s|x|y)$/i.test(tokens[0] ?? "")
+    ? `Model ${tokens.shift()!}`
+    : cleanVehicleToken(firstToken);
   const variantTokens = tokens.filter((token) =>
     !/^(?:19|20)\d{2}$/u.test(token) &&
     !/^(?:manual|autom[aá]tic[oa]|diesel|gas[oó]leo|gasolina|petrol|hybrid|h[ií]brido|electric|el[eé]trico)$/iu.test(token)

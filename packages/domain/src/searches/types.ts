@@ -50,7 +50,14 @@ export interface SearchLocationInput {
   radiusKm: number | null;
 }
 
+export interface VehicleModelTarget {
+  make: string;
+  model: string;
+  variant: string | null;
+}
+
 export interface VehicleSearchCriteria {
+  modelTarget?: SearchConstraint<VehicleModelTarget> | null;
   makeKeywords: SearchConstraint<string[]> | null;
   modelKeywords: SearchConstraint<string[]> | null;
   variantKeywords: SearchConstraint<string[]> | null;

@@ -1,3 +1,4 @@
+import { canonicalMake, identityKey } from "../searches/model-target.js";
 import type { SearchConstraint, VehicleSearchCriteria } from "../searches/index.js";
 import type { NormalizedVehicleFacts } from "./types.js";
 
@@ -45,6 +46,15 @@ export function evaluateVehicleMatch(
     }
   };
 
+  if (criteria.modelTarget != null) {
+    const target = criteria.modelTarget.value;
+    const make = facts.make === null ? null : identityKey(canonicalMake(facts.make)) === identityKey(canonicalMake(target.make));
+    const model = modelMatch(facts.model, facts.variant, target.model);
+    const variant = target.variant === null ? true : keywordMatch(facts.variant, [target.variant]);
+    const matches = [make, model, variant];
+    add("modelTarget", criteria.modelTarget, matches.includes(false) ? false : matches.includes(null) ? null : true,
+      `Model target: ${target.make} ${target.model}${target.variant ? ` ${target.variant}` : ""}`);
+  }
   add("makeKeywords", criteria.makeKeywords, keywordMatch(facts.make, criteria.makeKeywords?.value),
     explain("make", facts.make));
   add("modelKeywords", criteria.modelKeywords, keywordMatch(
@@ -100,4 +110,20 @@ function fold(value: string): string {
 
 function explain(label: string, value: unknown): string {
   return value === null ? `${label} is unknown` : `${label} normalized as ${String(value)}`;
+}
+
+// Title extraction can split a multiword model between model and variant.
+// Retain uncertain prefixes for enrichment instead of treating them as mismatches.
+function modelMatch(model: string | null, variant: string | null, target: string): boolean | null {
+  if (model === null) return null;
+  if (identityKey(model) === identityKey(target)) return true;
+  const words = (value: string): string => fold(value).replace(/[^a-z0-9]+/g, " ").trim();
+  const expected = words(target);
+  const known = words(model);
+  if (known && expected.startsWith(`${known} `)) {
+    if (variant === null) return null;
+    const combined = words(`${model} ${variant}`);
+    return combined === expected || combined.startsWith(`${expected} `);
+  }
+  return false;
 }

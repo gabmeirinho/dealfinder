@@ -1,3 +1,4 @@
+import { canonicalModelTarget } from "./model-target.js";
 import {
   SEARCH_RADIUS_OPTIONS_KM,
   type ConstraintStrength,
@@ -70,7 +71,7 @@ export function validateVehicleSearch(
     input.criteria.variantKeywords,
     input.criteria.requiredKeywords
   ];
-  if (!identifyingCriteria.some((criterion) => criterion !== null && criterion.value.length > 0)) {
+  if (input.criteria.modelTarget == null && !identifyingCriteria.some((criterion) => criterion !== null && criterion.value.length > 0)) {
     addIssue(
       issues,
       "criteria",
@@ -117,6 +118,17 @@ function validateCriteria(
   issues: SearchValidationIssue[],
   currentYear: number
 ): void {
+  if (criteria.modelTarget != null) {
+    const target = criteria.modelTarget;
+    if (target.strength !== "hard") addIssue(issues, "criteria.modelTarget", "model targets must be hard requirements");
+    for (const field of ["make", "model"] as const) {
+      if (typeof target.value?.[field] !== "string" || !target.value[field].trim() || target.value[field].length > 80 || /[,;|]/.test(target.value[field])) {
+        addIssue(issues, `criteria.modelTarget.${field}`, "enter one make and model per target (1-80 characters)");
+      }
+    }
+    if (target.value?.variant !== null && (typeof target.value?.variant !== "string" || target.value.variant.length > 80 || /[,;|]/.test(target.value.variant))) addIssue(issues, "criteria.modelTarget.variant", "enter one optional variant (up to 80 characters)");
+    if (criteria.makeKeywords !== null || criteria.modelKeywords !== null || criteria.variantKeywords !== null) addIssue(issues, "criteria.modelTarget", "use a model target or identity keywords, not both");
+  }
   validateKeywords(criteria.makeKeywords, "criteria.makeKeywords", issues);
   validateKeywords(criteria.modelKeywords, "criteria.modelKeywords", issues);
   validateKeywords(criteria.variantKeywords, "criteria.variantKeywords", issues);
@@ -279,6 +291,7 @@ function validateStrength<T>(
 function normalizeCriteria(criteria: VehicleSearchCriteria): VehicleSearchCriteria {
   return {
     ...criteria,
+    ...(criteria.modelTarget == null ? {} : { modelTarget: { strength: "hard" as const, value: canonicalModelTarget(criteria.modelTarget.value) } }),
     makeKeywords: normalizeKeywords(criteria.makeKeywords),
     modelKeywords: normalizeKeywords(criteria.modelKeywords),
     variantKeywords: normalizeKeywords(criteria.variantKeywords),

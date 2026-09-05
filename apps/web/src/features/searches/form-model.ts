@@ -9,7 +9,21 @@ import {
   type VehicleSearchDraft
 } from "@dealfinder/domain";
 
+export interface ModelTargetForm {
+  make: string;
+  model: string;
+  variant: string;
+  maximumPriceEur: string;
+  minimumYear: string;
+  maximumMileageKm: string;
+}
+
+export function emptyModelTarget(): ModelTargetForm {
+  return { make: "", model: "", variant: "", maximumPriceEur: "", minimumYear: "", maximumMileageKm: "" };
+}
+
 export interface SearchFormModel {
+  modelTargets: ModelTargetForm[];
   name: string;
   priority: string;
   active: boolean;
@@ -55,6 +69,7 @@ export function draftToSearchForm(
 ): SearchFormModel {
   const criteria = search.criteria;
   return {
+    modelTargets: criteria.modelTarget == null ? [] : [{ ...emptyModelTarget(), ...criteria.modelTarget.value, variant: criteria.modelTarget.value.variant ?? "" }],
     name: search.name,
     priority: String(search.priority),
     active: search.active,
@@ -97,9 +112,10 @@ export function searchFormToDraft(form: SearchFormModel): VehicleSearchDraft {
     priority: Number(form.priority),
     active: form.active,
     criteria: {
-      makeKeywords: keywordConstraint(form.makeKeywords, form.makeStrength),
-      modelKeywords: keywordConstraint(form.modelKeywords, form.modelStrength),
-      variantKeywords: keywordConstraint(form.variantKeywords, form.variantStrength),
+      ...(form.modelTargets.length === 0 ? {} : { modelTarget: { strength: "hard" as const, value: { make: form.modelTargets[0]!.make, model: form.modelTargets[0]!.model, variant: form.modelTargets[0]!.variant || null } } }),
+      makeKeywords: form.modelTargets.length ? null : keywordConstraint(form.makeKeywords, form.makeStrength),
+      modelKeywords: form.modelTargets.length ? null : keywordConstraint(form.modelKeywords, form.modelStrength),
+      variantKeywords: form.modelTargets.length ? null : keywordConstraint(form.variantKeywords, form.variantStrength),
       priceRange: minimumPriceEur === null && maximumPriceEur === null
         ? null
         : {
@@ -147,4 +163,17 @@ function joinKeywords(value: readonly string[] | undefined): string {
 
 function toText(value: number | null | undefined): string {
   return value === null || value === undefined ? "" : String(value);
+}
+
+/** Defaults are copied into independent searches; subsequent edits are per model. */
+export function modelFormsToDrafts(form: SearchFormModel): VehicleSearchDraft[] {
+  return form.modelTargets.map((target, index) => searchFormToDraft({
+    ...form,
+    name: form.name.trim() ? `${form.name.trim()} · ${target.make} ${target.model}${target.variant ? ` ${target.variant}` : ""}` : `${target.make} ${target.model}${target.variant ? ` ${target.variant}` : ""}`,
+    priority: String(Number(form.priority) + index),
+    modelTargets: [target],
+    maximumPriceEur: target.maximumPriceEur || form.maximumPriceEur,
+    minimumYear: target.minimumYear || form.minimumYear,
+    maximumMileageKm: target.maximumMileageKm || form.maximumMileageKm
+  }));
 }

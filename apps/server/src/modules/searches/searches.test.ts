@@ -37,6 +37,29 @@ describe("saved-search management API", () => {
     database.close();
   });
 
+  it("creates independent canonical model targets and rolls back invalid or over-limit batches", async () => {
+    const target = (make: string, model: string): VehicleSearchDraft => ({
+      ...createVehicleSearchDraft(`${make} ${model}`),
+      criteria: { ...createVehicleSearchDraft("").criteria, modelTarget: { strength: "hard", value: { make, model, variant: null } } }
+    });
+    const post = (searches: VehicleSearchDraft[], overrideActiveLimit = false) => api("/api/searches/models", { method: "POST", body: JSON.stringify({ searches, overrideActiveLimit }) });
+    const created = await post([target("VW", "Golf"), target("SEAT", "Leon")]);
+    expect(created.status).toBe(201);
+    const body = await json(created);
+    expect(body.searches).toHaveLength(2);
+    expect(body.searches[0].criteria.modelTarget.value.make).toBe("Volkswagen");
+    expect(body.searches[0].id).not.toBe(body.searches[1].id);
+    expect(body.searches.every((search: { sourceVerification: { state: string } }) => search.sourceVerification.state === "unverified")).toBe(true);
+    expect((await post([target("VW", "Golf"), target("Volkswagen", "Golf")])).status).toBe(400);
+    expect((await post([target("Audi", "A1"), target("", "A3")])).status).toBe(422);
+    expect(database.searches.list()).toHaveLength(2);
+    for (let index = 0; index < 7; index++) database.searches.create(target("BMW", `Model ${index}`));
+    expect((await post([target("Audi", "A1"), target("Audi", "A3")])).status).toBe(409);
+    expect(database.searches.list()).toHaveLength(9);
+    expect((await post([target("Audi", "A1"), target("Audi", "A3")], true)).status).toBe(201);
+    expect(database.searches.list()).toHaveLength(11);
+  });
+
   it("creates, lists, and reads searches with future-state placeholders", async () => {
     const createResponse = await api("/api/searches", {
       method: "POST",

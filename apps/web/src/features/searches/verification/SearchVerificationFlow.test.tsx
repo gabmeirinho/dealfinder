@@ -101,6 +101,7 @@ function search(state: "unverified" | "verified"): ManagedVehicleSearch {
 function searchClient(listed: ManagedVehicleSearch): SearchApiClient {
   return {
     list: async () => [listed],
+    createModels: async () => [],
     create: async () => listed,
     update: async () => listed,
     duplicate: async () => listed,
