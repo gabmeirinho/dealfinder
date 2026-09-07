@@ -35,6 +35,22 @@ const detail: ListingDetail = {
 };
 
 describe("listing review dashboard", () => {
+  it("combines source and budget filters and labels unknown broad-search prices", async () => {
+    const client = mockClient();
+    const search = { ...createVehicleSearchDraft("Any petrol under 6000"), id: "broad", createdAt: "", updatedAt: "", lastScanAt: null, nextScanAt: null, sourceVerification: { state: "unverified", verifiedAt: null } } as ManagedVehicleSearch;
+    search.criteria.searchScope = "broad";
+    search.criteria.priceRange = { strength: "hard", value: { minimumEur: null, maximumEur: 6000 } };
+    render(<ListingDashboard client={client} initialListings={[{ ...detail, broadSearchNames: [search.name], source: "standvirtual", matchStatus: "needs_information" }]} initialSearches={[search]} />);
+    expect(screen.getByText(/Price unknown · Budget not confirmed/)).toBeTruthy();
+    expect(screen.getByText(`Broad search · ${search.name}`)).toBeTruthy();
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByLabelText("Model / saved search"), search.id);
+    await user.selectOptions(screen.getByLabelText("Source"), "standvirtual");
+    await user.click(screen.getByLabelText("Under budget · €6,000"));
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(client.list).toHaveBeenCalledWith({ searchId: search.id, source: "standvirtual", underBudget: true, risk: false, archived: false });
+    expect(screen.getByText(/Turn off Under budget to review unknown prices/)).toBeTruthy();
+  });
   it("filters the shared inbox by the selected saved model target", async () => {
     const client = mockClient();
     const search = { ...createVehicleSearchDraft("SEAT Leon"), id: "leon", createdAt: "", updatedAt: "", lastScanAt: null, nextScanAt: null, sourceVerification: { state: "unverified", verifiedAt: null } } as ManagedVehicleSearch;

@@ -72,6 +72,29 @@ describe("listing review API", () => {
     database.close();
   });
 
+  it("filters broad Standvirtual prices while retaining unknowns for review outside the budget filter", async () => {
+    const draft = createVehicleSearchDraft("Any petrol under 6000");
+    draft.criteria.searchScope = "broad";
+    draft.criteria.priceRange = { strength: "hard", value: { minimumEur: null, maximumEur: 6000 } };
+    const search = database.searches.create(draft);
+    new ListingIngestionService(() => database).ingestScan({
+      searchId: search.id, observedAt: "2026-09-07T12:00:00.000Z", initialScan: true, completeSnapshot: false,
+      candidates: ["5500 €", "7000 €", null].map((displayedPrice, index) => ({
+        source: "standvirtual" as const, sourceListingId: `BROAD${index}`,
+        url: `https://www.standvirtual.com/carros/anuncio/vw-golf-IDBROAD${index}.html`,
+        title: "Volkswagen Golf 2005", description: null, displayedPrice, location: null, thumbnailUrl: null, rawCardFacts: ["Gasolina"]
+      }))
+    });
+    const route = `/api/listings?searchId=${search.id}&source=standvirtual`;
+    const all = await getJson<{ listings: Array<{ matchStatus: string }> }>(route);
+    expect(all.listings).toHaveLength(2);
+    expect(all.listings.some((listing) => listing.matchStatus === "needs_information")).toBe(true);
+    const capped = await getJson<{ listings: Array<{ facts: { priceCents: number }; broadSearchNames: string[] }> }>(`${route}&underBudget=true`);
+    expect(capped.listings).toHaveLength(1);
+    expect(capped.listings[0]).toMatchObject({ facts: { priceCents: 550000 }, broadSearchNames: [draft.name] });
+    expect((await fetch(`${baseUrl}/api/listings?underBudget=true`)).status).toBe(400);
+  });
+
   it("serves separate assessments and validates explicit sort dimensions", async () => {
     const at = "2026-08-24T10:01:00.000Z";
     const claim = database.enrichmentProcessing.claimNext(at)!;

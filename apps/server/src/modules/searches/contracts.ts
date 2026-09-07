@@ -33,6 +33,9 @@ export function presentSearch(
   verification?: SearchSourceVerification,
   schedule?: ScanSchedule
 ): ManagedVehicleSearch {
+  if (search.criteria.searchScope === "broad") {
+    return { ...search, lastScanAt: null, nextScanAt: null, sourceVerification: { state: "unverified", verifiedAt: null } };
+  }
   const verificationState = verification === undefined
     ? "unverified"
     : verification.criteriaFingerprint === fingerprintSearchCriteria(search)

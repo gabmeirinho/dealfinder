@@ -25,8 +25,12 @@ describe("searches repository", () => {
     const draft = completeSearch();
     draft.scanLimits = { initialCardLimit: 500, knownListingStopCount: 100, maxCards: 1500, maxDurationSeconds: 180 };
     const saved = testDatabase.connection.searches.create(draft);
+    testDatabase.connection.searches.saveStandvirtualScan(saved.id, {
+      lastAttemptAt: "2026-09-07T12:00:00.000Z", lastSuccessAt: null, lastError: "Offline", report: null
+    });
     reopenedConnection = openDatabase({ filename: testDatabase.filename });
     expect(reopenedConnection.searches.get(saved.id)?.scanLimits).toEqual(draft.scanLimits);
+    expect(reopenedConnection.searches.get(saved.id)?.standvirtualScan).toMatchObject({ lastError: "Offline", lastSuccessAt: null });
   });
 
   it("round-trips every criterion without losing hard and soft semantics", () => {

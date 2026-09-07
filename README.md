@@ -62,7 +62,18 @@ budget is included in the source URL. Targeted scans use `market_evidence`, whic
 omits the source price cap so above-budget vehicles can inform valuation.
 Both paths recheck all saved criteria locally; unsupported source filters remain
 local filters. Collection is bounded and never treated as a complete snapshot.
-The dashboard broad-search editor is a subsequent roadmap phase.
+In Saved searches, choose **New search → Any vehicle**, enter a name and at
+least one hard filter (for example **Petrol** and **Maximum EUR: 6000**), then save.
+Broad searches use nationwide Standvirtual collection. Facebook verification,
+manual Facebook scans, and Facebook scheduling are unavailable for these searches.
+
+**Scan Standvirtual** shows collected/eligible/scored counts, page count, price
+policy, stop reason, and partial errors. Scan state survives reloads and restarts;
+partial and failed attempts do not advance the last completed scan timestamp.
+**View Standvirtual listings** opens the inbox with that search and source selected.
+Choose **Under budget** and apply filters to show only known normalized prices
+within the selected search’s maximum price. Leave it off to review unknown prices
+and other listings that need more information. Confirmed hard mismatches remain hidden.
 
 The probe supports the same policies without writing to the database:
 

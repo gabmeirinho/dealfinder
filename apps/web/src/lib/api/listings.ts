@@ -5,6 +5,7 @@ export type ListingReviewState =
   | "new" | "shortlisted" | "contacted" | "viewing_arranged" | "rejected" | "bought";
 
 export interface ListingSummary {
+  broadSearchNames?: string[];
   id: number;
   title: string;
   source: "facebook" | "standvirtual";
@@ -88,6 +89,7 @@ export interface ListingDetail extends ListingSummary {
 export type ListingSort = "recent" | "market_value" | "personal_fit" | "confidence";
 
 export interface ListingFilters {
+  underBudget?: boolean;
   searchId?: string;
   sort?: ListingSort;
   state?: ListingReviewState;
@@ -117,6 +119,7 @@ export function createListingApiClient(request: typeof fetch = fetch): ListingAp
   return {
     list: async (filters = {}) => {
       const query = new URLSearchParams();
+      if (filters.underBudget) query.set("underBudget", "true");
       if (filters.searchId !== undefined) query.set("searchId", filters.searchId);
       if (filters.sort !== undefined) query.set("sort", filters.sort);
       if (filters.state !== undefined) query.set("state", filters.state);

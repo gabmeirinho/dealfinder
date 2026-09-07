@@ -116,6 +116,8 @@ function searchClient(listed: ManagedVehicleSearch): SearchApiClient {
       requestedAt: "2026-08-20T12:00:00.000Z"
     }),
     scanStandvirtual: async () => ({
+      searchScope: "targeted", pricePolicy: "market_evidence", observedAt: "2026-09-07T12:00:00.000Z", partialError: null,
+      observationsInserted: 0, listingsCreated: 0, priceChanges: 0,
       searchId: listed.id, collected: 0, eligible: 0, pagesScanned: 0,
       stopReason: "results_end", scoresCalculated: 0
     })

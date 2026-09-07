@@ -31,6 +31,22 @@ describe("scan scheduler", () => {
     expect(modes).toEqual(["deep"]);
   });
 
+  it("never schedules broad searches even with matching Facebook verification", async () => {
+    database = openDatabase({ filename: ":memory:" });
+    const draft = createVehicleSearchDraft("Broad");
+    draft.criteria.searchScope = "broad";
+    draft.criteria.fuels = { strength: "hard", value: ["petrol"] };
+    const search = database.searches.create(draft);
+    database.searchSources.saveVerification({ searchId: search.id, source: "facebook", sourceUrl: "https://www.facebook.com/marketplace/lisbon/vehicles", criteriaFingerprint: fingerprintSearchCriteria(search), verifiedAt: "2026-09-07T12:00:00.000Z" });
+    const calls: string[] = [];
+    scheduler = new ScanScheduler({ database: () => database!, scanner: { scan: async (id) => { calls.push(id); return scanResult(); } } });
+    scheduler.start();
+    await scheduler.whenIdle();
+    await scheduler.runDue();
+    expect(calls).toEqual([]);
+    expect(() => scheduler!.requestScan(search.id)).toThrow("Standvirtual only");
+  });
+
   it("runs one immediate catch-up sequentially in priority order", async () => {
     database = openDatabase({ filename: ":memory:" });
     const third = createVerifiedSearch(database, "Third", 3);

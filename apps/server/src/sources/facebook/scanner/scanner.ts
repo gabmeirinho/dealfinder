@@ -90,6 +90,7 @@ export class FacebookScanner {
     const database = this.#database();
     const search = database.searches.get(searchId);
     if (search === undefined) throw new FacebookScannerError("SEARCH_NOT_FOUND", "Saved search not found");
+    if (search.criteria.searchScope === "broad") throw new FacebookScannerError("STANDVIRTUAL_ONLY", "Broad searches use Standvirtual only");
     if (!search.active) throw new FacebookScannerError("SEARCH_INACTIVE", "Saved search is paused");
     const verification = database.searchSources.get(searchId, "facebook");
     if (verification === undefined) {

@@ -38,6 +38,16 @@ describe("Facebook search verification", () => {
 
   afterEach(() => database?.close());
 
+  it("refuses to open broad searches in Facebook", async () => {
+    const context = await createContext();
+    const draft = createVehicleSearchDraft("Any petrol");
+    draft.criteria.searchScope = "broad";
+    draft.criteria.fuels = { strength: "hard", value: ["petrol"] };
+    const search = context.database.searches.create(draft);
+    await expect(context.service.openFacebook(search.id)).rejects.toMatchObject({ code: "STANDVIRTUAL_ONLY" });
+    expect(context.session.url).toBe("about:blank");
+  });
+
   it("opens generated results and persists only the final URL after confirmation", async () => {
     const context = await createContext();
     const search = context.createSearch();

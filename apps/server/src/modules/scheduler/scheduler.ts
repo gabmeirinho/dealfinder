@@ -67,6 +67,7 @@ export class ScanScheduler {
   }
 
   public requestScan(searchId: string, mode: ScanMode = "standard"): ScanQueueReceipt {
+    if (this.#database().searches.get(searchId)?.criteria.searchScope === "broad") throw new Error("Broad searches use Standvirtual only");
     const requestedAt = this.#clock.now().toISOString();
     const run = this.#database().scanRuns.enqueue(searchId, "manual", requestedAt, mode);
     if (this.#running) this.kickWorker();
@@ -208,7 +209,7 @@ export class ScanScheduler {
   private eligibleSearches(): VehicleSearch[] {
     const database = this.#database();
     return database.searches.list().filter((search) => {
-      if (!search.active) return false;
+      if (!search.active || search.criteria.searchScope === "broad") return false;
       if (database.facebookHealth.isBlocked(search.id)) return false;
       const source = database.searchSources.get(search.id, "facebook");
       return source !== undefined &&

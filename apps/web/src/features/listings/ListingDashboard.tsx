@@ -31,6 +31,7 @@ export interface ListingDashboardProps {
 }
 
 interface AppliedListingFilters {
+  underBudget: boolean;
   searchId: string;
   state: ListingReviewState | "all";
   query: string;
@@ -47,7 +48,10 @@ export function ListingDashboard({
   initialListings
 }: ListingDashboardProps): ReactElement {
   const [searches, setSearches] = useState<readonly ManagedVehicleSearch[]>(initialSearches ?? []);
-  const [searchId, setSearchId] = useState("");
+  const [entry] = useState(() => new URLSearchParams(typeof window === "undefined" ? "" : window.location.hash.split("?")[1] ?? ""));
+  const [searchId, setSearchId] = useState(entry.get("searchId") ?? "");
+  const [underBudget, setUnderBudget] = useState(false);
+  const budget = searches.find((search) => search.id === searchId)?.criteria.priceRange?.value.maximumEur;
   const [searchError, setSearchError] = useState(false);
   useEffect(() => {
     if (!searchesClient || initialSearches !== undefined) return;
@@ -62,15 +66,16 @@ export function ListingDashboard({
   const [riskOnly, setRiskOnly] = useState(false);
   const [sort, setSort] = useState<ListingSort>("recent");
   const [archived, setArchived] = useState(false);
-  const [source, setSource] = useState<AppliedListingFilters["source"]>("all");
+  const [source, setSource] = useState<AppliedListingFilters["source"]>(entry.get("source") === "standvirtual" ? "standvirtual" : "all");
   const [appliedFilters, setAppliedFilters] = useState<AppliedListingFilters>({
-    searchId: "",
+    searchId,
+    underBudget: false,
     state: "all",
     query: "",
     riskOnly: false,
     archived: false,
     sort: "recent",
-    source: "all"
+    source
   });
   const [loading, setLoading] = useState(initialListings === undefined);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +88,7 @@ export function ListingDashboard({
     setError(null);
     try {
       const next = await client.list({
+        ...(appliedFilters.underBudget ? { underBudget: true } : {}),
         ...(appliedFilters.searchId === "" ? {} : { searchId: appliedFilters.searchId }),
         ...(appliedFilters.state === "all" ? {} : { state: appliedFilters.state }),
         ...(appliedFilters.query === "" ? {} : { query: appliedFilters.query }),
@@ -140,22 +146,24 @@ export function ListingDashboard({
 
       <form className="listing-filters" onSubmit={(event) => {
         event.preventDefault();
-        setAppliedFilters({ searchId, state, query: query.trim(), riskOnly, archived, sort, source });
+        setAppliedFilters({ searchId, state, query: query.trim(), riskOnly, archived, sort, source, underBudget: underBudget && budget != null });
       }}>
         <label><span>Model / saved search</span><select value={searchId} onChange={(event) => setSearchId(event.target.value)}><option value="">All models and searches</option>{searches.map((search) => <option key={search.id} value={search.id}>{search.name}</option>)}</select></label>
         <label><span>Find a car</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Make, model, or listing text" /></label>
         <label><span>Workflow</span><select value={state} onChange={(event) => setState(event.target.value as ListingReviewState | "all")}><option value="all">All active states</option>{WORKFLOW.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
         <label><span>Source</span><select value={source} onChange={(event) => setSource(event.target.value as AppliedListingFilters["source"])}><option value="all">All sources</option><option value="standvirtual">Standvirtual</option><option value="facebook">Facebook</option></select></label>
         <label className="review-check"><input type="checkbox" checked={riskOnly} onChange={(event) => setRiskOnly(event.target.checked)} /><span>High-risk only</span></label>
+        <label className="review-check"><input type="checkbox" checked={underBudget && budget != null} disabled={budget == null} onChange={(event) => setUnderBudget(event.target.checked)} /><span>{budget == null ? "Under budget (select a search with a maximum price)" : `Under budget · €${budget.toLocaleString("en-GB")}`}</span></label>
         <label className="review-check"><input type="checkbox" checked={archived} onChange={(event) => setArchived(event.target.checked)} /><span>Archived</span></label>
         <label><span>Sort listings</span><select value={sort} onChange={(event) => setSort(event.target.value as ListingSort)}><option value="recent">Recently seen</option><option value="market_value">Market discount</option><option value="personal_fit">Personal fit</option><option value="confidence">Valuation confidence</option></select></label>
         <button className="primary-action" type="submit">Apply filters</button>
       </form>
 
       {searchError ? <p role="status">Model filters could not be loaded. Reload the page to try again.</p> : null}
+      {appliedFilters.underBudget ? <p>Showing known normalized prices within this search’s budget. Turn off Under budget to review unknown prices.</p> : null}
       {error !== null ? <p className="review-error" role="alert">{error} <button type="button" onClick={() => void load()}>Try again</button></p> : null}
       {loading ? <p className="review-loading" aria-live="polite"><span />Loading reviewed listings</p> : null}
-      {!loading && listings.length === 0 ? <div className="review-empty"><h2>No cars in this view</h2><p>Adjust the workflow or archive filters. New processed matches will appear here after a scan.</p></div> : null}
+      {!loading && listings.length === 0 ? <div className="review-empty"><h2>No cars in this view</h2><p>Adjust the search, source, budget, workflow, or archive filters. Matches and listings needing more information appear here after a scan.</p></div> : null}
 
       <div className={`review-ledger ${selected === null ? "is-list" : "has-detail"}`}>
         <ol className="listing-inbox" aria-label="Listings">
@@ -175,6 +183,8 @@ function ListingRow({ listing, active, onOpen }: { listing: ListingSummary; acti
         <span className="listing-score">{listing.score?.marketValue.discountPercent == null ? "—" : `${Math.abs(listing.score.marketValue.discountPercent)}%`}<small>{listing.score?.marketValue.discountPercent == null ? "market" : listing.score.marketValue.discountPercent >= 0 ? "below median" : "above median"}</small></span>
         <span className="listing-row-main"><strong>{identity || listing.title}</strong><span>{listing.displayedPrice ?? "Price unknown"} · {listing.location ?? "Location unknown"}</span><small><span className={`listing-source source-${listing.source}`}>{sourceLabel(listing.source)}</span> · Seen {formatDate(listing.lastSeenAt)} · {listing.matchStatus === "needs_information" ? "Needs more information" : listing.processing?.state ?? "not processed"}</small><span className="listing-assessment-summary">{marketLabel(listing.score?.marketValue)}<br />Personal fit: {fitLabel(listing.score?.personalFit)} · Confidence: {listing.score?.confidence.level ?? "not assessed"}</span>{listing.assessmentSearchName ? <small>For {listing.assessmentSearchName}</small> : null}</span>
         <span className={`workflow-badge state-${listing.review.state}`}>{labelState(listing.review.state)}</span>
+        {listing.broadSearchNames?.length ? <span>Broad search · {listing.broadSearchNames.join(", ")}</span> : null}
+        {listing.facts?.priceCents == null ? <span>Price unknown · Budget not confirmed</span> : null}
         {listing.risk?.reasons.length ? <span className="risk-stamp">{listing.risk.reasons[0]?.label}</span> : null}
       </button>
     </li>

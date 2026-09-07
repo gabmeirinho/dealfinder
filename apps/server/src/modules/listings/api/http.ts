@@ -68,6 +68,7 @@ export async function handleListingReviewRequest(
           ...(query === undefined ? {} : { query }),
           ...(sourceValue === null ? {} : { source: sourceValue }),
           archived,
+          underBudget: url.searchParams.get("underBudget") === "true",
           sort: sort as "recent" | "market_value" | "personal_fit" | "confidence",
           risk
         })
