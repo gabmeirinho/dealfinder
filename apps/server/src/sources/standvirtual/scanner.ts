@@ -1,12 +1,15 @@
 import type { DatabaseConnection } from "@dealfinder/db";
+import { validateVehicleSearch, type SearchScope } from "@dealfinder/domain";
 
 import { ListingIngestionService } from "../../modules/listings/index.js";
 import type { DealScoringService } from "../../modules/scoring/index.js";
 import type { DuplicateDetectionService } from "../../modules/duplicates/index.js";
 import { collectStandvirtualResults } from "./collector.js";
-import { buildStandvirtualModelSearch } from "./search-builder.js";
+import { buildStandvirtualSearch, type StandvirtualPricePolicy } from "./search-builder.js";
 
 export interface StandvirtualScanReport {
+  searchScope: SearchScope;
+  pricePolicy: StandvirtualPricePolicy;
   searchId: string;
   observedAt: string;
   collected: number;
@@ -29,7 +32,7 @@ export interface StandvirtualScannerOptions {
   collect?: typeof collectStandvirtualResults;
 }
 
-/** Runs an uncapped market scan and applies the saved search only as personal eligibility. */
+/** Collects broad budget results or targeted market evidence through shared ingestion. */
 export class StandvirtualScanner {
   readonly #database: () => DatabaseConnection;
   readonly #scoring: DealScoringService;
@@ -52,13 +55,29 @@ export class StandvirtualScanner {
     const search = database.searches.get(searchId);
     if (search === undefined) throw new StandvirtualScanError(404, "SEARCH_NOT_FOUND", "Saved search not found");
     if (!search.active) throw new StandvirtualScanError(409, "SEARCH_INACTIVE", "Activate the search before scanning Standvirtual");
+    const validation = validateVehicleSearch(search);
+    if (!validation.success) throw new StandvirtualScanError(400, "INVALID_SEARCH", validation.issues.map((issue) => `${issue.path}: ${issue.message}`).join("; "));
+    const searchScope = search.criteria.searchScope ?? "targeted";
     const target = search.criteria.modelTarget?.value;
-    if (target === undefined) {
+    if (searchScope === "targeted" && target === undefined) {
       throw new StandvirtualScanError(409, "MODEL_TARGET_REQUIRED", "Standvirtual scans require an explicit make and model target");
     }
     const petrolOnly = search.criteria.fuels?.strength === "hard" &&
       search.criteria.fuels.value.length === 1 && search.criteria.fuels.value[0] === "petrol";
-    const built = buildStandvirtualModelSearch(target.make, target.model, petrolOnly ? { fuel: "petrol" } : {});
+    const pricePolicy = searchScope === "broad" ? "strict" : "market_evidence";
+    const maximumPriceEur = search.criteria.priceRange?.strength === "hard"
+      ? search.criteria.priceRange.value.maximumEur : null;
+    let built;
+    try {
+      built = buildStandvirtualSearch({
+        ...(target === undefined ? {} : { make: target.make, model: target.model }),
+        ...(petrolOnly ? { fuel: "petrol" as const } : {}),
+        ...(maximumPriceEur == null || pricePolicy === "market_evidence" ? {} : { maximumPriceEur }),
+        pricePolicy
+      });
+    } catch (error) {
+      throw new StandvirtualScanError(400, "INVALID_STANDVIRTUAL_QUERY", error instanceof Error ? error.message : "Invalid query");
+    }
     const collected = await this.#collect(built.url, { limit: 800 });
     const observedAt = this.#now().toISOString();
     const initialScan = !database.rawCandidates.hasSourceObservations(searchId, "standvirtual");
@@ -87,6 +106,8 @@ export class StandvirtualScanner {
       database.normalizedVehicles.getMatch(listing.id, searchId)?.eligible === true
     ).length;
     return {
+      searchScope,
+      pricePolicy,
       searchId,
       observedAt,
       collected: collected.listings.length,

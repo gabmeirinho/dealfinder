@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 import { chromium } from "playwright";
 import { collectStandvirtualResults } from "./collector.js";
 import { parseStandvirtualResults, validateSearchUrl } from "./parser.js";
-import { buildStandvirtualModelSearch } from "./search-builder.js";
+import { buildStandvirtualSearch } from "./search-builder.js";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -15,6 +15,7 @@ async function main() {
     model: { type: "string" },
     fuel: { type: "string" },
     "max-price": { type: "string" },
+    "price-policy": { type: "string", default: "strict" },
     budget: { type: "string" },
     html: { type: "string" },
     browser: { type: "boolean", default: false },
@@ -25,6 +26,8 @@ async function main() {
     console.log("Standvirtual feasibility probe (paginated HTTP collection, no database writes)\n"
       + "--make <vehicle make> --model <vehicle model> [--fuel petrol] [--budget <EUR>] --limit <1-100>\n"
       + "--max-price <EUR>  Optional source cap; omit for unbiased market evidence\n"
+      + "--fuel petrol --max-price 6000  Browse without a model target\n"
+      + "--price-policy strict|market_evidence  Apply or omit the source price cap\n"
       + "--url <public results URL> --limit <1-100>\n"
       + "--browser  Open visible Chromium; manually prepare results, then press Enter\n"
       + "--html <file>  Parse locally saved HTML without network access\n"
@@ -39,9 +42,11 @@ async function main() {
   if (values.url !== undefined && hasModelTarget) {
     throw new Error("Choose --url or --make with --model, not both.");
   }
-  if ((values.fuel !== undefined || values["max-price"] !== undefined) && !hasModelTarget) {
-    throw new Error("Use --fuel and --max-price with --make and --model.");
+  if (values.url !== undefined && (values.fuel !== undefined || values["max-price"] !== undefined || values["price-policy"] !== "strict")) {
+    throw new Error("Generated filters and price policies cannot be combined with --url.");
   }
+  const pricePolicy = values["price-policy"];
+  if (pricePolicy !== "strict" && pricePolicy !== "market_evidence") throw new Error("Price policy must be strict or market_evidence.");
   if (values.fuel !== undefined && values.fuel !== "petrol") {
     throw new Error("The Standvirtual probe currently supports --fuel petrol.");
   }
@@ -49,8 +54,10 @@ async function main() {
     ? undefined
     : Number(values["max-price"]);
   const personalBudgetEur = values.budget === undefined ? null : requireEuroAmount(values.budget, "Budget");
-  const modelSearch = hasModelTarget
-    ? buildStandvirtualModelSearch(values.make ?? "", values.model ?? "", {
+  const modelSearch = values.url === undefined
+    ? buildStandvirtualSearch({
+      ...(hasModelTarget ? { make: values.make!, model: values.model! } : {}),
+      pricePolicy,
       ...(values.fuel === "petrol" ? { fuel: "petrol" as const } : {}),
       ...(maximumPriceEur === undefined ? {} : { maximumPriceEur })
     })
@@ -85,6 +92,8 @@ async function main() {
     listing.facts.priceCents !== null && listing.facts.priceCents <= personalBudgetEur * 100).length;
   console.log(JSON.stringify({ ...report, mode, request: {
     url,
+    searchScope: modelSearch?.searchScope ?? null,
+    pricePolicy: modelSearch?.pricePolicy ?? null,
     modelTarget: modelSearch?.target ?? null,
     standvirtualIds: modelSearch?.standvirtualIds ?? null,
     filters: modelSearch?.filters ?? null,
