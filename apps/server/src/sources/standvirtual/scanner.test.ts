@@ -7,16 +7,37 @@ import type { DuplicateDetectionService } from "../../modules/duplicates/index.j
 import { DealScoringService } from "../../modules/scoring/index.js";
 import { collectStandvirtualResults } from "./collector.js";
 import { StandvirtualScanner } from "./scanner.js";
+import { createHttpServer, listenHttpServer, closeHttpServer } from "../../app/http.js";
 
 describe("Standvirtual scanner", () => {
   let database: DatabaseConnection | undefined;
 
   afterEach(() => database?.close());
 
-  it("collects uncapped market data, applies the budget locally, and scores immediately", async () => {
+  it("rejects invalid broad drafts before collection", async () => {
+    database = openDatabase({ filename: ":memory:" });
+    const draft = createVehicleSearchDraft("Unbounded");
+    draft.criteria.searchScope = "broad";
+    const collect = vi.fn();
+    vi.spyOn(database.searches, "get").mockReturnValue({
+      ...draft, id: "invalid", createdAt: "2026-09-05", updatedAt: "2026-09-05",
+      location: { mode: "nationwide", origin: null, radiusKm: null }
+    });
+    const scanner = new StandvirtualScanner({
+      database: () => database!,
+      scoring: new DealScoringService({ database: () => database! }),
+      duplicates: { recomputeAll: vi.fn() } as unknown as DuplicateDetectionService,
+      collect
+    });
+    await expect(scanner.scan("invalid")).rejects.toMatchObject({ code: "INVALID_SEARCH", statusCode: 400 });
+    expect(collect).not.toHaveBeenCalled();
+  });
+
+  it.each(["targeted", "broad"] as const)("ingests and scores %s searches through the API", async (searchScope) => {
     database = openDatabase({ filename: ":memory:" });
     const draft = createVehicleSearchDraft("Petrol Golf under 6k");
-    draft.criteria.modelTarget = {
+    draft.criteria.searchScope = searchScope;
+    if (searchScope === "targeted") draft.criteria.modelTarget = {
       strength: "hard", value: { make: "Volkswagen", model: "Golf", variant: null }
     };
     draft.criteria.priceRange = {
@@ -59,22 +80,44 @@ describe("Standvirtual scanner", () => {
     const duplicates = {
       recomputeAll: vi.fn(async () => [])
     } as unknown as DuplicateDetectionService;
+    const processingWake = vi.fn();
     const scanner = new StandvirtualScanner({
       database: () => database as DatabaseConnection,
       scoring: new DealScoringService({ database: () => database as DatabaseConnection }),
       duplicates,
+      processingWake,
       collect,
       now: () => new Date("2026-09-05T12:00:00.000Z")
     });
 
-    const report = await scanner.scan(search.id);
+    const server = createHttpServer({ database: () => database!, standvirtual: () => scanner });
+    const address = await listenHttpServer(server, { host: "127.0.0.1", port: 0 });
+    let report;
+    try {
+      const response = await fetch(`http://${address.host}:${address.port}/api/searches/${search.id}/standvirtual/scan`, { method: "POST" });
+      expect(response.status).toBe(200);
+      report = (await response.json() as { report: unknown }).report;
+    } finally {
+      await closeHttpServer(server);
+    }
 
-    expect(collectedUrls[0]).toContain("filter_enum_make");
-    expect(collectedUrls[0]).toContain("filter_enum_model");
+    if (searchScope === "targeted") {
+      expect(collectedUrls[0]).toContain("filter_enum_make");
+      expect(collectedUrls[0]).toContain("filter_enum_model");
+      expect(collectedUrls[0]).not.toContain("price%3Ato");
+    } else {
+      expect(collectedUrls[0]).not.toContain("filter_enum_make");
+      expect(collectedUrls[0]).not.toContain("filter_enum_model");
+      expect(collectedUrls[0]).toContain("price%3Ato%5D=6000");
+    }
     expect(collectedUrls[0]).toContain("filter_enum_fuel_type");
-    expect(collectedUrls[0]).not.toContain("price%3Ato");
+    expect(report).toMatchObject({ searchScope, pricePolicy: searchScope === "broad" ? "strict" : "market_evidence" });
     expect(report).toMatchObject({ collected: 7, eligible: 1, scoresCalculated: 1 });
     expect(database.rawCandidates.get("standvirtual", "GOLF6")).toBeDefined();
+    expect(duplicates.recomputeAll).toHaveBeenCalledOnce();
+    expect(processingWake).toHaveBeenCalledOnce();
+    const aboveBudget = database.listings.getBySource("standvirtual", "GOLF6")!;
+    expect(database.normalizedVehicles.getMatch(aboveBudget.id, search.id)?.eligible).toBe(false);
     const eligible = database.listings.getBySource("standvirtual", "GOLF0")!;
     expect(database.dealScores.get(eligible.id, search.id)?.score.marketValue).toMatchObject({
       status: "available", comparableCount: 6, medianPriceCents: 750_000

@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { buildStandvirtualModelSearch } from "./search-builder.js";
+import { buildStandvirtualModelSearch, buildStandvirtualSearch } from "./search-builder.js";
 
 describe("Standvirtual model search builder", () => {
+  it("builds broad petrol budget queries and explicitly uncapped evidence queries", () => {
+    const strict = buildStandvirtualSearch({ fuel: "petrol", maximumPriceEur: 6000 });
+    expect(strict.url).toBe("https://www.standvirtual.com/carros?search%5Bfilter_enum_fuel_type%5D%5B0%5D=gaz&search%5Bfilter_float_price%3Ato%5D=6000");
+    expect(strict).toMatchObject({ searchScope: "broad", pricePolicy: "strict", target: null });
+    const evidence = buildStandvirtualSearch({ fuel: "petrol", maximumPriceEur: 6000, pricePolicy: "market_evidence" });
+    expect(evidence.url).not.toContain("price");
+    expect(evidence.filters.maximumPriceEur).toBeNull();
+    expect(buildStandvirtualSearch({ make: "VW" }).standvirtualIds).toEqual({ make: "vw", model: null });
+    expect(() => buildStandvirtualSearch({ model: "Golf" })).toThrow("requires a make");
+    expect(() => buildStandvirtualSearch({ fuel: "diesel" as "petrol" })).toThrow("petrol");
+  });
+
+  it.each([0, -1, 1.5, NaN, Infinity, 10_000_001])("rejects invalid price %s even for evidence queries", (maximumPriceEur) => {
+    expect(() => buildStandvirtualSearch({ maximumPriceEur, pricePolicy: "market_evidence" })).toThrow("Maximum price");
+  });
   it("builds explicit make and model filters", () => {
     const result = buildStandvirtualModelSearch("BMW", "M2");
     expect(result).toEqual({

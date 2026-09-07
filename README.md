@@ -55,6 +55,27 @@ stores its stop reason (`initial_limit`, `known_streak`, `card_limit`, `time_lim
 
 ## Standvirtual collection and scoring
 
+The API also accepts saved criteria with `searchScope: "broad"`, for example hard
+petrol fuel and a hard maximum price of €6,000 without make/model identity.
+Broad scans browse nationwide and use the `strict` price policy: the hard maximum
+budget is included in the source URL. Targeted scans use `market_evidence`, which
+omits the source price cap so above-budget vehicles can inform valuation.
+Both paths recheck all saved criteria locally; unsupported source filters remain
+local filters. Collection is bounded and never treated as a complete snapshot.
+The dashboard broad-search editor is a subsequent roadmap phase.
+
+The probe supports the same policies without writing to the database:
+
+```sh
+npm run standvirtual:probe -- --fuel petrol --max-price 6000 --price-policy strict
+npm run standvirtual:probe -- --make VW --model Golf --max-price 6000 --price-policy market_evidence --budget 6000
+```
+
+Probe JSON reports `searchScope`, `pricePolicy`, and applied source `filters`.
+`--budget` only computes local sample eligibility. Custom `--url` input cannot be
+combined with generated filters or a generated market-evidence policy; its query
+metadata is reported as null.
+
 Saved searches with an explicit make/model target can run a Standvirtual scan from
 the search dashboard. Each scan collects up to 100 newest-first listings without a
 source price cap, associates them with the saved search, normalizes and risk-checks
