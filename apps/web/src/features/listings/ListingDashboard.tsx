@@ -1,4 +1,4 @@
-import { DealAssessment, marketLabel, fitLabel } from "./DealAssessment.js";
+import { DealAssessment, marketLabel, fitLabel, recommendationLabel } from "./DealAssessment.js";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
 
 import {
@@ -155,7 +155,7 @@ export function ListingDashboard({
         <label className="review-check"><input type="checkbox" checked={riskOnly} onChange={(event) => setRiskOnly(event.target.checked)} /><span>High-risk only</span></label>
         <label className="review-check"><input type="checkbox" checked={underBudget && budget != null} disabled={budget == null} onChange={(event) => setUnderBudget(event.target.checked)} /><span>{budget == null ? "Under budget (select a search with a maximum price)" : `Under budget · €${budget.toLocaleString("en-GB")}`}</span></label>
         <label className="review-check"><input type="checkbox" checked={archived} onChange={(event) => setArchived(event.target.checked)} /><span>Archived</span></label>
-        <label><span>Sort listings</span><select value={sort} onChange={(event) => setSort(event.target.value as ListingSort)}><option value="recent">Recently seen</option><option value="market_value">Market discount</option><option value="personal_fit">Personal fit</option><option value="confidence">Valuation confidence</option></select></label>
+        <label><span>Sort listings</span><select value={sort} onChange={(event) => setSort(event.target.value as ListingSort)}><option value="best_deal">Best deals</option><option value="recent">Recently seen</option><option value="market_value">Market discount</option><option value="personal_fit">Personal fit</option><option value="confidence">Valuation confidence</option></select></label>
         <button className="primary-action" type="submit">Apply filters</button>
       </form>
 
@@ -181,10 +181,10 @@ function ListingRow({ listing, active, onOpen }: { listing: ListingSummary; acti
     <li className={`listing-inbox-row ${active ? "is-selected" : ""} ${listing.risk?.reasons.length ? "is-risk" : ""}`}>
       <button type="button" onClick={onOpen} aria-label={`Review ${listing.title}`}>
         <span className="listing-score">{listing.score?.marketValue.discountPercent == null ? "—" : `${Math.abs(listing.score.marketValue.discountPercent)}%`}<small>{listing.score?.marketValue.discountPercent == null ? "market" : listing.score.marketValue.discountPercent >= 0 ? "below median" : "above median"}</small></span>
-        <span className="listing-row-main"><strong>{identity || listing.title}</strong><span>{listing.displayedPrice ?? "Price unknown"} · {listing.location ?? "Location unknown"}</span><small><span className={`listing-source source-${listing.source}`}>{sourceLabel(listing.source)}</span> · Seen {formatDate(listing.lastSeenAt)} · {listing.matchStatus === "needs_information" ? "Needs more information" : listing.processing?.state ?? "not processed"}</small><span className="listing-assessment-summary">{marketLabel(listing.score?.marketValue)}<br />Personal fit: {fitLabel(listing.score?.personalFit)} · Confidence: {listing.score?.confidence.level ?? "not assessed"}</span>{listing.assessmentSearchName ? <small>For {listing.assessmentSearchName}</small> : null}</span>
+        <span className="listing-row-main"><strong>{identity || listing.title}</strong><span>{listing.displayedPrice ?? "Price unknown"} · {listing.location ?? "Location unknown"}</span><small><span className={`listing-source source-${listing.source}`}>{sourceLabel(listing.source)}</span> · Seen {formatDate(listing.lastSeenAt)} · {listing.matchStatus === "needs_information" ? "Needs more information" : listing.processing?.state ?? "not processed"}</small><span className="listing-assessment-summary">{recommendationLabel(listing.recommendation?.band)}<br />{listing.recommendation?.reasons[0] ? <>{listing.recommendation.reasons[0]}<br /></> : null}{listing.recommendation?.warnings[0] ? <>{listing.recommendation.warnings[0]}<br /></> : null}{marketLabel(listing.score?.marketValue)}<br />Personal fit: {fitLabel(listing.score?.personalFit)} · Confidence: {listing.score?.confidence.level ?? "not assessed"}</span>{listing.assessmentSearchName ? <small>For {listing.assessmentSearchName}</small> : null}</span>
         <span className={`workflow-badge state-${listing.review.state}`}>{labelState(listing.review.state)}</span>
-        {listing.broadSearchNames?.length ? <span>Broad search · {listing.broadSearchNames.join(", ")}</span> : null}
-        {listing.facts?.priceCents == null ? <span>Price unknown · Budget not confirmed</span> : null}
+        {listing.broadSearchNames?.length ? <span className="listing-row-context">Broad search · {listing.broadSearchNames.join(", ")}</span> : null}
+        {listing.facts?.priceCents == null ? <span className="listing-row-context">Price unknown · Budget not confirmed</span> : null}
         {listing.risk?.reasons.length ? <span className="risk-stamp">{listing.risk.reasons[0]?.label}</span> : null}
       </button>
     </li>

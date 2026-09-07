@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { VehicleEnrichment, VehicleRiskAssessment } from "../index.js";
+import { assessRecommendation, normalizeVehicleFacts, type RecommendationInput, type VehicleEnrichment, type VehicleRiskAssessment } from "../index.js";
 import { buildComparableCohort, calculateDealScore, type ComparableListingInput } from "./index.js";
 
 const EVALUATED_AT = "2026-08-23T12:00:00.000Z";
@@ -200,3 +200,62 @@ function enrichment(options: {
 function noRisk(): VehicleRiskAssessment {
   return { highRiskVerifyPrice: false, reasons: [] };
 }
+
+describe("explainable shortlist recommendations", () => {
+  function input(): RecommendationInput {
+    const facts = normalizeVehicleFacts({ title: "BMW 320d M Sport", displayedPrice: "18000 €", description: null,
+      cardFacts: ["2020", "80 000 km", "Diesel", "Automática", "190 cv", "Profissional"], referenceYear: 2026 });
+    return { facts, risk: noRisk(), matchStatus: "matches", budget: { minimumEur: null, maximumEur: 20000 },
+      score: calculateDealScore(scoreInput({ enrichment: enrichment({ priceCents: 1800000 }), marketplaceHistory: history() })).score,
+      lastSeenAt: EVALUATED_AT, evaluatedAt: EVALUATED_AT };
+  }
+
+  it("explains a strong candidate without changing the independent assessments", () => {
+    const evidence = input();
+    const before = structuredClone(evidence.score);
+    const result = assessRecommendation(evidence);
+    expect(result.band).toBe("strong_candidate");
+    expect(result.reasons.join(" ")).toMatch(/budget.*last seen.*2020.*80,000.*confidence.*median/);
+    expect(result.warnings).toEqual([]);
+    expect(evidence.score).toEqual(before);
+    expect(assessRecommendation(evidence)).toEqual(result);
+  });
+
+  it("never promotes unknown prices, missing criteria, damage, imports, price risks or stale evidence", () => {
+    const evidence = input();
+    const variants: Partial<RecommendationInput>[] = [
+      { facts: { ...evidence.facts!, priceCents: null } },
+      { facts: { ...evidence.facts!, priceCents: 0 } },
+      { matchStatus: "needs_information" }, { risk: null },
+      { risk: { highRiskVerifyPrice: true, reasons: [] } },
+      { risk: { highRiskVerifyPrice: false, reasons: [{ code: "damaged_vehicle", label: "VERIFY CONDITION", explanation: "Damage reported" }] } },
+      { risk: { highRiskVerifyPrice: false, reasons: [{ code: "imported_vehicle", label: "VERIFY IMPORT HISTORY", explanation: "Import history unknown" }] } },
+      { lastSeenAt: "2026-01-01" }, { lastSeenAt: "invalid" }, { lastSeenAt: "2027-01-01" },
+      { budget: null }, { score: { ...evidence.score!, confidence: { ...evidence.score!.confidence, level: "low" } } }
+    ];
+    for (const variant of variants) {
+      const result = assessRecommendation({ ...evidence, ...variant });
+      expect(result.band).toBe("needs_verification");
+      expect(result.orderingKey).toBeLessThan(assessRecommendation(evidence).orderingKey);
+    }
+  });
+
+  it("labels cold starts explicitly and ranks mismatches below all other bands", () => {
+    const evidence = input();
+    const cold = assessRecommendation({ ...evidence, score: calculateDealScore(scoreInput()).score });
+    expect(cold.band).toBe("insufficient_data");
+    expect(cold.warnings).toContain("Insufficient market data to identify a bargain.");
+    for (const variant of [{ matchStatus: "excluded" as const }, { available: false }, { budget: { minimumEur: null, maximumEur: 5000 } }]) {
+      const result = assessRecommendation({ ...evidence, ...variant });
+      expect(result.band).toBe("not_recommended");
+      expect(result.orderingKey).toBeLessThan(cold.orderingKey);
+    }
+  });
+
+  it("uses mileage, age and freshness only within policy bands", () => {
+    const evidence = input();
+    const fresh = assessRecommendation(evidence);
+    expect(assessRecommendation({ ...evidence, lastSeenAt: "2026-08-01" }).orderingKey).toBeLessThan(fresh.orderingKey);
+    expect(assessRecommendation({ ...evidence, facts: { ...evidence.facts!, mileageKm: 200000, year: 2005 } }).orderingKey).toBeLessThan(fresh.orderingKey);
+  });
+});

@@ -107,7 +107,7 @@ describe("listing review API", () => {
       uncertainties: []
     }, at, null);
     new DealScoringService({ database: () => database }).recomputeAll(at);
-    for (const sort of ["recent", "market_value", "personal_fit", "confidence"]) {
+    for (const sort of ["best_deal", "recent", "market_value", "personal_fit", "confidence"]) {
       const response = await getJson<{ listings: Array<{ score: unknown }> }>(`/api/listings?sort=${sort}`);
       expect(response.listings[0]?.score).toMatchObject({
         version: 2, marketValue: { status: "insufficient_data", discountPercent: null },

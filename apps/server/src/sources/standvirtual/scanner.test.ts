@@ -51,7 +51,7 @@ describe("Standvirtual scanner", () => {
       collectedUrls.push(url);
       return {
         source: "standvirtual" as const,
-        parserVersion: 1,
+        parserVersion: 2,
         scope: "paginated" as const,
         order: "newest_first" as const,
         recognizedCards: prices.length,
@@ -64,6 +64,8 @@ describe("Standvirtual scanner", () => {
         partialError: null,
         listings: prices.map((price, index) => ({
           source: "standvirtual" as const,
+          location: "Lisboa", thumbnailUrl: "https://images.olxcdn.com/example.jpg",
+          postedAt: null, warranty: null, imported: null,
           sourceListingId: `GOLF${index}`,
           canonicalUrl: `https://www.standvirtual.com/carros/anuncio/vw-golf-IDGOLF${index}.html`,
           facts: normalizeVehicleFacts({
@@ -71,6 +73,7 @@ describe("Standvirtual scanner", () => {
             description: null,
             displayedPrice: `${price} €`,
             cardFacts: [`${100_000 + index * 1_000} km`, "Gasolina", "Manual"],
+            seller: { type: "dealer" },
             referenceYear: 2026
           }),
           missingFields: []
@@ -119,6 +122,13 @@ describe("Standvirtual scanner", () => {
     const aboveBudget = database.listings.getBySource("standvirtual", "GOLF6")!;
     expect(database.normalizedVehicles.getMatch(aboveBudget.id, search.id)?.eligible).toBe(false);
     const eligible = database.listings.getBySource("standvirtual", "GOLF0")!;
+    expect(database.normalizedVehicles.getFacts(eligible.id)?.facts.seller.type).toBe("dealer");
+    expect(database.rawCandidates.listObservations(eligible.rawCandidateId)[0]).toMatchObject({
+      location: "Lisboa", thumbnailUrl: "https://images.olxcdn.com/example.jpg"
+    });
+    expect(database.dealScores.get(eligible.id, search.id)?.score.recommendation).toMatchObject({
+      band: "strong_candidate", warnings: []
+    });
     expect(database.dealScores.get(eligible.id, search.id)?.score.marketValue).toMatchObject({
       status: "available", comparableCount: 6, medianPriceCents: 750_000
     });

@@ -18,12 +18,13 @@ export function fitLabel(fit: PersonalFitAssessment | undefined): string {
   return `${fit.percent}%${fit.status === "partial" ? " of known preferences" : " matched"}`;
 }
 
-export function DealAssessment({ listing }: { listing: Pick<ListingDetail, "scores" | "matchStatus"> }): ReactElement {
+export function DealAssessment({ listing }: { listing: Pick<ListingDetail, "scores" | "matchStatus" | "recommendation"> }): ReactElement {
   const [searchId, setSearchId] = useState(listing.scores[0]?.searchId ?? "");
   const selected = listing.scores.find((item) => item.searchId === searchId) ?? listing.scores[0];
   if (selected === undefined) return (
     <section className="assessment-detail" aria-label="Deal assessment">
       <h3>Deal assessment</h3>
+      <RecommendationDetails recommendation={listing.recommendation} />
       <p className="muted-copy">{listing.matchStatus === "needs_information"
         ? "Required vehicle facts are still missing. Capture Facebook details or correct a fact to help resolve them."
         : listing.matchStatus === "excluded" ? "This listing does not meet the required search criteria."
@@ -39,6 +40,7 @@ export function DealAssessment({ listing }: { listing: Pick<ListingDetail, "scor
   return (
     <section className="assessment-detail" aria-label="Deal assessment">
       <h3>Deal assessment</h3>
+      <RecommendationDetails recommendation={selected.score.recommendation ?? listing.recommendation} />
       {listing.scores.length > 1 ? <label className="assessment-search"><span>Assess for search</span>
         <select value={selected.searchId} onChange={(event) => setSearchId(event.target.value)}>
           {listing.scores.map((item) => <option key={item.searchId} value={item.searchId}>{item.searchName}</option>)}
@@ -99,4 +101,23 @@ function criterionLabel(criterion: string): string {
     excludedKeywords: "Excluded keywords"
   };
   return labels[criterion] ?? criterion;
+}
+
+export function recommendationLabel(band: import("@dealfinder/domain").RecommendationBand | undefined): string {
+  return band === undefined ? "Needs verification" : {
+    strong_candidate: "Strong candidate", worth_reviewing: "Worth reviewing", needs_verification: "Needs verification",
+    insufficient_data: "Insufficient data", not_recommended: "Not recommended"
+  }[band];
+}
+
+function RecommendationDetails({ recommendation }: { recommendation: import("@dealfinder/domain").RecommendationAssessment | undefined }): ReactElement {
+  return <div className="assessment-section">
+    <h4>Shortlist recommendation</h4>
+    <p className="assessment-verdict">{recommendationLabel(recommendation?.band)}</p>
+    {recommendation ? <>
+      <ul>{recommendation.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+      {recommendation.warnings.length > 0 ? <><h4>What to verify</h4><ul>{recommendation.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></> : null}
+      <p className="muted-copy">Evidence freshness: {recommendation.freshness.status} · Last seen {recommendation.freshness.lastSeenAt.slice(0, 10)}</p>
+    </> : <p className="muted-copy">Insufficient evidence for a shortlist recommendation.</p>}
+  </div>;
 }

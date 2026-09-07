@@ -76,6 +76,7 @@ export interface ValuationConfidence {
 
 export interface DealScore {
   version: typeof DEAL_SCORE_VERSION;
+  recommendation?: import("./recommendation.js").RecommendationAssessment;
   marketValue: MarketValueAssessment;
   personalFit: PersonalFitAssessment;
   confidence: ValuationConfidence;

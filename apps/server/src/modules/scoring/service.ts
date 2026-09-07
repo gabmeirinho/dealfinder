@@ -4,6 +4,7 @@ import {
   applyFactCorrections,
   assessVehicleRisk,
   calculateDealScore,
+  assessRecommendation,
   evaluateVehicleMatch,
   enrichmentFromNormalizedFacts,
   type ComparableListingInput,
@@ -93,6 +94,11 @@ export class DealScoringService {
         evaluatedAt: scoredAt,
         marketplaceHistory: history,
         factConflicts: database.listingDetailFacts.get(subject.listingId)?.conflicts ?? []
+      });
+      calculation.score.recommendation = assessRecommendation({
+        score: calculation.score, facts: subject.facts, risk: subject.risk, matchStatus: match.status,
+        budget: search.criteria.priceRange?.value ?? null, lastSeenAt: listing.lastSeenAt,
+        evaluatedAt: scoredAt, available: listing.availability === "active"
       });
       scores.push(database.dealScores.save(subject.listingId, searchId, calculation, scoredAt));
     }

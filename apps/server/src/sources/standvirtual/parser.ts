@@ -1,5 +1,5 @@
 import { parse } from "parse5";
-import { normalizeVehicleFacts } from "@dealfinder/domain";
+import { normalizeVehicleFacts, containsSellerIdentityOrContactData } from "@dealfinder/domain";
 
 interface Node {
   tagName?: string;
@@ -66,20 +66,49 @@ export function parseStandvirtualResults(html: string, limit = 20, referenceYear
     const title = heading ? text(heading) : "";
     if (!link || !title || title.length > 1000) { rejectedCards++; continue; }
     if (seen.has(link.id)) { duplicateCards++; continue; }
-    seen.add(link.id);
+
     const priceNode = all(card, (n) => attr(n, "data-testid") === "ad-price")[0]
       ?? all(card, (n) => n.tagName === "h3" && /^[\d\s.,]+(?:\s*(?:EUR|€))?$/u.test(text(n)))[0];
-    const rawPrice = priceNode ? text(priceNode) : null;
+    const priceText = priceNode ? text(priceNode) : null;
+    const rawPrice = priceText && priceText.length <= 200 ? priceText : null;
     // Only accept an explicitly EUR-denominated price; never infer currency or monthly payments.
     const hasEuro = all(card, (n) => /^(?:EUR|€)$/u.test(text(n))).length > 0;
-    const displayedPrice = rawPrice && (/EUR|€/u.test(rawPrice) || hasEuro)
+    const displayedPrice = rawPrice && /^[\d\s.,]+(?:\s*(?:EUR|€))?$/u.test(rawPrice) && (/EUR|€/u.test(rawPrice) || hasEuro)
       ? rawPrice.replace(/EUR/gu, "€") + (/EUR|€/u.test(rawPrice) ? "" : " €") : null;
     const cardFacts = all(card, (n) => ["mileage", "fuel_type", "gearbox", "first_registration_year"]
       .includes(attr(n, "data-parameter"))).map(text).filter(Boolean);
-    const facts = normalizeVehicleFacts({ title, displayedPrice, description: null, cardFacts, referenceYear });
+    // Read only named vehicle fields; never flatten seller/profile containers.
+    const field = (...names: string[]) => {
+      const node = all(card, (n) => names.includes(attr(n, "data-testid")) || names.includes(attr(n, "data-parameter")))[0];
+      const value = node ? text(node) : "";
+      return value && value.length <= 500 && !/https?:\/\/|www\./iu.test(value) && !containsSellerIdentityOrContactData([value]) ? value : null;
+    };
+    const location = field("location", "ad-location");
+    const description = field("description", "ad-description");
+    const sellerText = field("seller-type", "seller_type");
+    const sellerType = /^(?:profissional|dealer)$/iu.test(sellerText ?? "") ? "dealer" as const :
+      /^(?:particular|private)$/iu.test(sellerText ?? "") ? "private" as const : null;
+    const warrantyText = field("warranty");
+    const importText = field("imported", "country_origin");
+    const warranty = explicitIndicator(warrantyText, /garantia|warranty|\d+\s*(?:meses|months)/iu);
+    const imported = explicitIndicator(importText, /importad[oa]|imported/iu);
+    if (sellerType) cardFacts.push(sellerType === "dealer" ? "Profissional" : "Particular");
+    if (warrantyText) cardFacts.push(`Warranty: ${warrantyText}`);
+    if (importText) cardFacts.push(imported === true ? "Importado" : imported === false ? "Nacional" : `Origin: ${importText}`);
+    const time = all(card, (n) => n.tagName === "time")[0];
+    const date = time ? attr(time, "datetime") : "";
+    const postedAt = /^\d{4}-\d{2}-\d{2}(?:T.*)?$/u.test(date) && Number.isFinite(Date.parse(date))
+      ? new Date(date).toISOString() : null;
+    if (postedAt) cardFacts.push(`Posted: ${postedAt}`);
+    const thumbnailUrl = all(card, (n) => n.tagName === "img").map((n) => safeThumbnail(attr(n, "src"))).find(Boolean) ?? null;
+    let facts;
+    try {
+      facts = normalizeVehicleFacts({ title, displayedPrice, description, cardFacts, referenceYear, seller: { type: sellerType } });
+    } catch { rejectedCards++; continue; }
+    seen.add(link.id);
     const missingFields = (["priceCents", "make", "model", "year", "mileageKm", "fuel", "transmission"] as const)
       .filter((key) => facts[key] === null);
-    listings.push({ source: "standvirtual" as const, sourceListingId: link.id, canonicalUrl: link.url, facts, missingFields });
+    listings.push({ source: "standvirtual" as const, sourceListingId: link.id, canonicalUrl: link.url, location, thumbnailUrl, postedAt, warranty, imported, facts, missingFields });
     if (listings.length >= limit) break;
   }
   if (listings.length === 0) {
@@ -87,7 +116,7 @@ export function parseStandvirtualResults(html: string, limit = 20, referenceYear
   }
   return {
     source: "standvirtual" as const,
-    parserVersion: 1,
+    parserVersion: 2,
     scope: "single_page" as const,
     recognizedCards: cards.length,
     rejectedCards,
@@ -95,4 +124,21 @@ export function parseStandvirtualResults(html: string, limit = 20, referenceYear
     limitReached: listings.length === limit,
     listings
   };
+}
+
+function safeThumbnail(input: string): string | null {
+  try {
+    const url = new URL(input);
+    if (input.length > 4096 || url.protocol !== "https:" || url.username || url.password || url.port ||
+      !(url.hostname === "www.standvirtual.com" || url.hostname.endsWith(".olxcdn.com"))) return null;
+    url.search = "";
+    url.hash = "";
+    return url.href;
+  } catch { return null; }
+}
+
+function explicitIndicator(value: string | null, positive: RegExp): boolean | null {
+  if (value === null) return null;
+  if (/^(?:n[aã]o|no|sem|without|nacional)\b/iu.test(value)) return false;
+  return /^(?:sim|yes)$/iu.test(value) || positive.test(value) ? true : null;
 }

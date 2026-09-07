@@ -69,3 +69,15 @@ describe("independent assessment presentation", () => {
     expect(screen.getByText(/Required vehicle facts are still missing/)).toBeTruthy();
   });
 });
+
+it("shows recommendation evidence, verification warnings and freshness without the ordering key", () => {
+  render(<DealAssessment listing={{ scores: [], recommendation: {
+    band: "needs_verification", orderingKey: 1234567,
+    reasons: ["The asking price is within the saved search budget."], warnings: ["Verify import history."],
+    freshness: { lastSeenAt: "2026-09-01", evaluatedAt: "2026-09-07", ageDays: 6, status: "recent" }
+  } }} />);
+  expect(screen.getByText("Needs verification")).toBeTruthy();
+  expect(screen.getByText("Verify import history.")).toBeTruthy();
+  expect(screen.getByText(/Evidence freshness: recent/)).toBeTruthy();
+  expect(screen.queryByText("1234567")).toBeNull();
+});

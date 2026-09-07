@@ -48,7 +48,7 @@ export async function handleListingReviewRequest(
     if (segments.length === 2) {
       if (request.method !== "GET") return methodNotAllowed(response, "GET");
       const sort = url.searchParams.get("sort") ?? "recent";
-      if (!["recent", "market_value", "personal_fit", "confidence"].includes(sort)) {
+      if (!["best_deal", "recent", "market_value", "personal_fit", "confidence"].includes(sort)) {
         throw new Error("Invalid listing sort");
       }
       const stateValue = url.searchParams.get("state");
@@ -69,7 +69,7 @@ export async function handleListingReviewRequest(
           ...(sourceValue === null ? {} : { source: sourceValue }),
           archived,
           underBudget: url.searchParams.get("underBudget") === "true",
-          sort: sort as "recent" | "market_value" | "personal_fit" | "confidence",
+          sort: sort as "best_deal" | "recent" | "market_value" | "personal_fit" | "confidence",
           risk
         })
       });

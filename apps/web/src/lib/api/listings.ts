@@ -5,6 +5,7 @@ export type ListingReviewState =
   | "new" | "shortlisted" | "contacted" | "viewing_arranged" | "rejected" | "bought";
 
 export interface ListingSummary {
+  recommendation?: import("@dealfinder/domain").RecommendationAssessment;
   broadSearchNames?: string[];
   id: number;
   title: string;
@@ -86,7 +87,7 @@ export interface ListingDetail extends ListingSummary {
   suggestedQuestions: string[];
 }
 
-export type ListingSort = "recent" | "market_value" | "personal_fit" | "confidence";
+export type ListingSort = "best_deal" | "recent" | "market_value" | "personal_fit" | "confidence";
 
 export interface ListingFilters {
   underBudget?: boolean;

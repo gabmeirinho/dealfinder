@@ -102,8 +102,9 @@ export class StandvirtualScanner {
         title: listing.facts.original.title,
         description: listing.facts.original.description,
         displayedPrice: listing.facts.original.displayedPrice,
-        location: null,
-        thumbnailUrl: null,
+        location: listing.location ?? null,
+        thumbnailUrl: listing.thumbnailUrl ?? null,
+        seller: listing.facts.seller,
         rawCardFacts: listing.facts.original.cardFacts
       }))
     });
