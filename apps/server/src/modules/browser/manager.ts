@@ -1,3 +1,4 @@
+import { validateListingNavigationUrl } from "./adapter.js";
 import type {
   BrowserAttentionReason,
   BrowserStatus
@@ -101,6 +102,7 @@ export class BrowserManager {
   }
 
   public async navigateListing(url: string): Promise<string> {
+    url = validateListingNavigationUrl(url);
     const session = this.requireOpenSession();
     if (session.navigateListing === undefined) {
       throw new BrowserCommandError(

@@ -14,12 +14,14 @@ export interface StandvirtualScannerOptions {
   scoring: DealScoringService;
   duplicates: DuplicateDetectionService;
   processingWake?: () => void;
+  afterBroadScan?: (searchId: string) => Promise<void>;
   now?: () => Date;
   collect?: typeof collectStandvirtualResults;
 }
 
 /** Collects broad budget results or targeted market evidence through shared ingestion. */
 export class StandvirtualScanner {
+  readonly #afterBroadScan: ((searchId: string) => Promise<void>) | undefined;
   readonly #database: () => DatabaseConnection;
   readonly #scoring: DealScoringService;
   readonly #duplicates: DuplicateDetectionService;
@@ -28,6 +30,7 @@ export class StandvirtualScanner {
   readonly #collect: typeof collectStandvirtualResults;
 
   public constructor(options: StandvirtualScannerOptions) {
+    this.#afterBroadScan = options.afterBroadScan;
     this.#database = options.database;
     this.#scoring = options.scoring;
     this.#duplicates = options.duplicates;
@@ -110,6 +113,7 @@ export class StandvirtualScanner {
     });
     await this.#duplicates.recomputeAll(observedAt);
     const scores = this.#scoring.recomputeAll(observedAt);
+    if (searchScope === "broad") await this.#afterBroadScan?.(searchId);
     this.#processingWake();
     const eligible = ingestion.listings.filter((listing) =>
       database.normalizedVehicles.getMatch(listing.id, searchId)?.eligible === true

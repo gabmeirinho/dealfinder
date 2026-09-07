@@ -184,13 +184,13 @@ function resolveEnrichment(
     price: priceCorrected
       ? { amountCents: facts.priceCents, interpretation: facts.priceCents === null ? "unknown" : "full_price" }
       : enrichment.price,
-    sellerType: choose("sellerType", enrichment.sellerType, facts.seller.type),
+    sellerType: choose("sellerType", sourceAware.sellerType, facts.seller.type),
     indicators: {
       financing: enrichment.indicators.financing || facts.indicators.financing,
       monthlyPayment: enrichment.indicators.monthlyPayment || facts.indicators.monthlyPayment,
       deposit: enrichment.indicators.deposit || facts.indicators.deposit,
       damaged: enrichment.indicators.damaged || facts.indicators.damaged,
-      imported: enrichment.indicators.imported || facts.indicators.imported
+      imported: structured?.imported ?? (enrichment.indicators.imported || facts.indicators.imported)
     }
   };
 }

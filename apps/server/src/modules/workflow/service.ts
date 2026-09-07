@@ -126,6 +126,8 @@ export class ListingReviewService {
       normalizedFacts: stored?.facts ?? null,
       effectiveFacts: effectiveFacts ?? null,
       detailFacts: database.listingDetailFacts.get(listingId) ?? null,
+      cardEvidence: observation ? { description: observation.description, cardFacts: observation.rawCardFacts, observedAt: observation.observedAt } : null,
+      detailCapture: this.detailCaptureState(listingId),
       corrections: corrections.map((correction) => ({
         ...correction,
         proposal: database.corrections.getProposalForCorrection(correction.id) ?? null
@@ -203,6 +205,19 @@ export class ListingReviewService {
     return decision === "approved"
       ? this.corrections.approveRule(proposalId, decidedAt)
       : this.corrections.rejectRule(proposalId, decidedAt);
+  }
+
+  private detailCaptureState(listingId: number) {
+    const database = this.database();
+    const attempt = database.listingDetailCaptureAttempts.get(listingId);
+    const snapshot = database.listingDetailFacts.get(listingId);
+    const now = Date.now();
+    const stale = snapshot === undefined || now - Date.parse(snapshot.capturedAt) >= 7 * 86_400_000;
+    return {
+      state: attempt?.state ?? "not_captured", stale,
+      canCapture: stale && attempt?.state !== "processing" && (attempt === undefined || Date.parse(attempt.nextAttemptAt) <= now),
+      nextAttemptAt: attempt?.nextAttemptAt ?? null, lastErrorCode: attempt?.lastErrorCode ?? null
+    };
   }
 
   private recommendation(listingId: number, searchId?: string): RecommendationAssessment {

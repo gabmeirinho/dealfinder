@@ -133,7 +133,8 @@ export async function handleListingReviewRequest(
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Invalid listing request";
     if (/not found/iu.test(message)) return notFound(response);
-    sendJson(response, 400, { error: message });
+    const code = typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : undefined;
+    sendJson(response, code === "DETAIL_CAPTURE_COOLDOWN" ? 429 : 400, { error: message, ...(code ? { code } : {}) });
     return true;
   }
 }

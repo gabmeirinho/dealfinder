@@ -24,6 +24,8 @@ import { standvirtualListingSourceMigration } from "./023-standvirtual-listing-s
 import type { Migration } from "./types.js";
 import { standvirtualScanStateMigration } from "./024-standvirtual-scan-state.js";
 
+import { sourceDetailEvidenceMigration } from "./025-source-detail-evidence.js";
+
 export const allMigrations: readonly Migration[] = [
   createSettingsMigration,
   createSearchesMigration,
@@ -48,7 +50,8 @@ export const allMigrations: readonly Migration[] = [
   separateDealAssessmentsMigration,
   scanLimitsMigration,
   standvirtualListingSourceMigration,
-  standvirtualScanStateMigration
+  standvirtualScanStateMigration,
+  sourceDetailEvidenceMigration
 ];
 
 export const LATEST_SCHEMA_VERSION =

@@ -31,6 +31,10 @@ export class ListingDetailDescriptionsRepository {
     return this.get(listingId) as ListingDetailDescription;
   }
 
+  public delete(listingId: number): void {
+    this.database.prepare("DELETE FROM listing_detail_descriptions WHERE listing_id = ?").run(listingId);
+  }
+
   public get(listingId: number): ListingDetailDescription | undefined {
     const row = this.database.prepare(`
       SELECT listing_id, description, captured_at

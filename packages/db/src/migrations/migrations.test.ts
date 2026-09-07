@@ -28,7 +28,7 @@ describe("database migrations", () => {
 
     expect(testDatabase.connection.migrationResult).toEqual({
       currentVersion: LATEST_SCHEMA_VERSION,
-      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
     });
     const migrations = testDatabase.connection.database
       .prepare("SELECT version, name FROM schema_migrations ORDER BY version")
@@ -57,8 +57,25 @@ describe("database migrations", () => {
       { version: 21, name: "separate_deal_assessments" },
       { version: 22, name: "scan_limits" },
       { version: 23, name: "standvirtual_listing_source" },
-      { version: 24, name: "standvirtual_scan_state" }
+      { version: 24, name: "standvirtual_scan_state" },
+      { version: 25, name: "source_detail_evidence" }
     ]);
+  });
+
+  it("upgrades existing Facebook detail snapshots without changing their evidence", () => {
+    const database = openDatabase({ filename: ":memory:", migrations: allMigrations.filter(migration => migration.version <= 24) });
+    try {
+      const draft = createVehicleSearchDraft("Golf"); draft.criteria.makeKeywords = { strength: "hard", value: ["Volkswagen"] };
+      const search = database.searches.create(draft);
+      const raw = insertLegacyRawObservation(database.database, search.id, { sourceListingId: "100000000000123", observedAt: "2026-09-01", title: "Volkswagen Golf", displayedPrice: "5500 €", location: "Lisboa", rawCardFacts: [] });
+      const listing = database.listings.ingestObservation({ rawCandidateId: raw.candidate.id, searchId: search.id, observedAt: "2026-09-01",
+        initialScan: true, source: "facebook", sourceListingId: "100000000000123", listingUrl: raw.candidate.listingUrl, title: "Volkswagen Golf", displayedPrice: "5500 €", priceCents: 550000 }).listing;
+      const facts = { make: "Volkswagen", model: "Golf", year: 2010, mileageKm: 100000, variant: null, fuel: null, transmission: null, powerHp: null };
+      database.database.prepare("INSERT INTO listing_detail_facts VALUES (?, ?, ?, ?, ?, ?)").run(listing.id, JSON.stringify(facts), JSON.stringify(facts), JSON.stringify(facts), "[]", "2026-09-01");
+      expect(runMigrations(database.database, allMigrations).appliedVersions).toEqual([25]);
+      expect(database.listingDetailFacts.get(listing.id)).toMatchObject({ source: "facebook", evidence: null, structuredFacts: facts, mileage: { source: "facebook_structured" } });
+      expect(database.database.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    } finally { database.close(); }
   });
 
   it("does not reapply migrations after restart", () => {
@@ -113,7 +130,7 @@ describe("database migrations", () => {
     });
 
     const result = runMigrations(database.database, allMigrations, () => new Date("2026-08-23"));
-    expect(result.appliedVersions).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]);
+    expect(result.appliedVersions).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]);
     const listing = database.database.prepare(`
       SELECT id, discovery_kind FROM listings WHERE source_listing_id = ?
     `).get("100000000000001") as unknown as { id: number; discovery_kind: string };
@@ -157,7 +174,7 @@ describe("database migrations", () => {
     database.enrichmentProcessing.enqueue(listing.id, "2026-08-23T09:00:00.000Z");
 
     expect(runMigrations(database.database, allMigrations, () => new Date("2026-08-23")))
-      .toEqual({ currentVersion: 24, appliedVersions: [15, 16, 17, 18, 19, 20, 21, 22, 23, 24] });
+      .toEqual({ currentVersion: 25, appliedVersions: [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25] });
     expect(database.enrichmentProcessing.getQueueItem(listing.id)).toMatchObject({ state: "queued" });
 
     database.database.prepare(`
@@ -189,7 +206,7 @@ describe("database migrations", () => {
       displayedPrice: "45 000 €", priceCents: 4_500_000
     });
 
-    expect(runMigrations(database.database, allMigrations).appliedVersions).toEqual([23, 24]);
+    expect(runMigrations(database.database, allMigrations).appliedVersions).toEqual([23, 24, 25]);
     const standvirtual = database.rawCandidates.saveObservation({
       searchId: search.id,
       observedAt: "2026-09-05T11:00:00.000Z",

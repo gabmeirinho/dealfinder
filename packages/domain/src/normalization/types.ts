@@ -13,6 +13,8 @@ export interface OriginalVehicleText {
  * These facts are never populated from seller identity, contact, or URLs.
  */
 export interface StructuredVehicleFacts {
+  sellerType?: SellerType | null;
+  imported?: boolean | null;
   year?: number | null;
   mileageKm?: number | null;
   make?: string | null;
@@ -69,6 +71,7 @@ export interface NormalizedVehicleFacts {
 
 export interface NormalizeVehicleInput extends OriginalVehicleText {
   referenceYear: number;
+  structuredSource?: "facebook" | "standvirtual";
   seller?: Partial<CoarseSellerSignals>;
   structuredFacts?: StructuredVehicleFacts;
 }

@@ -81,6 +81,7 @@ export function normalizeVehicleFacts(input: NormalizeVehicleInput): NormalizedV
   if (powerMatch !== null) evidence.powerHp = [powerMatch.evidence];
   const makeModel = findMakeModelVariant(input.title);
   const structured = input.structuredFacts;
+  const sourceLabel = input.structuredSource === "standvirtual" ? "Standvirtual" : "Facebook";
   const structuredYear = structuredValue(structured?.year);
   const structuredMileage = structuredValue(structured?.mileageKm);
   const structuredMake = structuredValue(structured?.make);
@@ -89,23 +90,23 @@ export function normalizeVehicleFacts(input: NormalizeVehicleInput): NormalizedV
   const structuredFuel = structuredValue(structured?.fuel);
   const structuredTransmission = structuredValue(structured?.transmission);
   const structuredPower = structuredValue(structured?.powerHp);
-  if (structuredMileage !== null) evidence.mileageKm = [`Facebook structured: ${structuredMileage}`];
+  if (structuredMileage !== null) evidence.mileageKm = [`${sourceLabel} structured: ${structuredMileage}`];
   else if (mileageMatch !== null) evidence.mileageKm = [mileageMatch.evidence];
-  if (structuredYear !== null) evidence.year = [`Facebook structured: ${structuredYear}`];
+  if (structuredYear !== null) evidence.year = [`${sourceLabel} structured: ${structuredYear}`];
   else if (yearMatch !== null) evidence.year = [yearMatch.evidence];
-  if (structuredPower !== null) evidence.powerHp = [`Facebook structured: ${structuredPower}`];
+  if (structuredPower !== null) evidence.powerHp = [`${sourceLabel} structured: ${structuredPower}`];
   else if (powerMatch !== null) evidence.powerHp = [powerMatch.evidence];
-  if (structuredMake !== null) evidence.make = [`Facebook structured: ${structuredMake}`];
+  if (structuredMake !== null) evidence.make = [`${sourceLabel} structured: ${structuredMake}`];
   else if (makeModel.make !== null) evidence.make = [makeModel.evidence];
-  if (structuredModel !== null) evidence.model = [`Facebook structured: ${structuredModel}`];
+  if (structuredModel !== null) evidence.model = [`${sourceLabel} structured: ${structuredModel}`];
   else if (makeModel.model !== null) evidence.model = [makeModel.evidence];
-  if (structuredVariant !== null) evidence.variant = [`Facebook structured: ${structuredVariant}`];
+  if (structuredVariant !== null) evidence.variant = [`${sourceLabel} structured: ${structuredVariant}`];
   else if (makeModel.variant !== null) evidence.variant = [makeModel.evidence];
   const fuel = firstPattern(combined, FUEL_PATTERNS);
-  if (structuredFuel !== null) evidence.fuel = [`Facebook structured: ${structuredFuel}`];
+  if (structuredFuel !== null) evidence.fuel = [`${sourceLabel} structured: ${structuredFuel}`];
   else if (fuel !== null) evidence.fuel = [fuel.evidence];
   const transmission = firstPattern(combined, TRANSMISSION_PATTERNS);
-  if (structuredTransmission !== null) evidence.transmission = [`Facebook structured: ${structuredTransmission}`];
+  if (structuredTransmission !== null) evidence.transmission = [`${sourceLabel} structured: ${structuredTransmission}`];
   else if (transmission !== null) evidence.transmission = [transmission.evidence];
 
   const indicators = Object.fromEntries(
@@ -115,10 +116,17 @@ export function normalizeVehicleFacts(input: NormalizeVehicleInput): NormalizedV
       return [key, matches.length > 0];
     })
   ) as unknown as VehicleIndicators;
+  if (structured?.imported != null) {
+    indicators.imported = structured.imported;
+    evidence.imported = [`${sourceLabel} structured: ${structured.imported ? "imported" : "national"}`];
+  }
   const seller = normalizeSeller(input.seller, combined);
+  seller.type = structured?.sellerType ?? seller.type;
   if (seller.type !== null) evidence.sellerType = sources.filter((source) =>
     /\b(?:particular|private seller|profissional|dealer|stand)\b/iu.test(source)
   );
+
+  if (structured?.sellerType != null) evidence.sellerType = [`${sourceLabel} structured: ${structured.sellerType}`];
 
   return {
     original,

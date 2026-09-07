@@ -314,6 +314,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .inspector-header p { margin: 0; color: #b9cbc7; }
 .inspector-header .secondary-action { color: var(--paper); border-color: #6c8589; }
 .listing-inspector > .listing-risk { display: grid; gap: 6px; color: #7b2f27; background: #f4dfda; }
+.source-detail-evidence .listing-risk, .fact-comparison .listing-risk { display: grid; gap: 6px; margin-block: 18px; }
 .listing-risk strong { font-family: var(--utility); font-size: 0.72rem; letter-spacing: 0.04em; }
 .listing-risk span { font-size: 0.78rem; }
 .workflow-actions { display: flex; flex-wrap: wrap; margin-bottom: 18px; }

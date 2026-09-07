@@ -73,7 +73,8 @@ export class ListingDetailCaptureAttemptsRepository {
   public findNextEligible(
     searchId: string,
     at: string,
-    detailFreshBefore: string
+    detailFreshBefore: string,
+    source: "facebook" | "standvirtual" = "facebook"
   ): number | undefined {
     if (searchId.trim() === "") throw new Error("Search ID is required");
     timestamp(at, "Eligibility time");
@@ -89,7 +90,8 @@ export class ListingDetailCaptureAttemptsRepository {
        AND matches.match_status <> 'excluded'
       LEFT JOIN listing_detail_facts details ON details.listing_id = listings.id
       LEFT JOIN listing_detail_capture_attempts attempts ON attempts.listing_id = listings.id
-      WHERE listings.source = 'facebook'
+      WHERE listings.source = ?
+        AND (? = 'facebook' OR matches.match_status = 'matches')
         AND listings.availability = 'active'
         AND NOT EXISTS (
           SELECT 1 FROM listing_classifications excluded
@@ -98,7 +100,11 @@ export class ListingDetailCaptureAttemptsRepository {
         AND (details.listing_id IS NULL OR details.captured_at < ?)
         AND (attempts.listing_id IS NULL OR attempts.next_attempt_at <= ?)
         AND (attempts.state IS NULL OR attempts.state <> 'processing')
-      ORDER BY CASE WHEN matches.match_status = 'needs_information' THEN 0 ELSE 1 END,
+      ORDER BY CASE WHEN ? = 'standvirtual' THEN COALESCE((
+        SELECT json_extract(scores.assessment_json, '$.recommendation.orderingKey')
+        FROM listing_deal_scores scores WHERE scores.listing_id = listings.id AND scores.search_id = links.search_id
+      ), -1) ELSE 0 END DESC,
+      CASE WHEN matches.match_status = 'needs_information' THEN 0 ELSE 1 END,
       COALESCE((
         SELECT MAX(scores.personal_fit_percent)
         FROM listing_deal_scores scores
@@ -107,7 +113,7 @@ export class ListingDetailCaptureAttemptsRepository {
       listings.last_seen_at DESC,
       listings.id ASC
       LIMIT 1
-    `).get(searchId, detailFreshBefore, at) as unknown as { id: number } | undefined;
+    `).get(searchId, source, source, detailFreshBefore, at, source) as unknown as { id: number } | undefined;
     return row?.id;
   }
 

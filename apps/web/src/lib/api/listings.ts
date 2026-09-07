@@ -52,10 +52,14 @@ export interface RiskAssessment {
 }
 
 export interface ListingDetail extends ListingSummary {
+  cardEvidence?: { description: string | null; cardFacts: string[]; observedAt: string } | null;
+  detailCapture?: { state: "not_captured" | "processing" | "succeeded" | "failed"; stale: boolean; canCapture: boolean; nextAttemptAt: string | null; lastErrorCode: string | null };
   original: VehicleFacts["original"];
   normalizedFacts: VehicleFacts | null;
   effectiveFacts: VehicleFacts | null;
   detailFacts?: {
+    source?: "facebook" | "standvirtual";
+    evidence?: import("@dealfinder/domain").StandvirtualDetailEvidence | null;
     structuredFacts: {
       year: number | null; mileageKm: number | null; make: string | null; model: string | null;
       variant: string | null; fuel: string | null; transmission: string | null; powerHp: number | null;

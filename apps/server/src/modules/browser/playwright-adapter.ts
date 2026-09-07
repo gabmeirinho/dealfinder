@@ -1,3 +1,5 @@
+import { validateListingNavigationUrl } from "./adapter.js";
+import { canonicalStandvirtualDetailUrl, StandvirtualDetailError } from "../../sources/standvirtual/detail-parser.js";
 import { mkdir } from "node:fs/promises";
 
 import { chromium, errors, type BrowserContext, type Page } from "playwright";
@@ -88,6 +90,10 @@ class PlaywrightBrowserSession implements BrowserSession {
   }
 
   public async navigateListing(url: string): Promise<string> {
+    url = validateListingNavigationUrl(url);
+    if (new URL(url).hostname === "www.standvirtual.com") {
+      return await navigateStandvirtualDetailPage(this.#controlledPage, url);
+    }
     try {
       await this.#controlledPage.goto(url, {
         waitUntil: "commit",
@@ -327,4 +333,18 @@ async function waitForMarketplaceResults(page: Page): Promise<void> {
 
 function normalizeQuery(value: string): string {
   return value.trim().replace(/\s+/gu, " ").toLocaleLowerCase("en");
+}
+
+export async function navigateStandvirtualDetailPage(page: Page, input: string): Promise<string> {
+  const safeUrl = canonicalStandvirtualDetailUrl(input);
+  try {
+    await page.goto(safeUrl, { waitUntil: "domcontentloaded", timeout: FACEBOOK_NAVIGATION_TIMEOUT_MS });
+    if (canonicalStandvirtualDetailUrl(page.url()) !== safeUrl) {
+      throw new StandvirtualDetailError("STANDVIRTUAL_DETAIL_REDIRECT", "Navigation left the selected Standvirtual listing.");
+    }
+    return page.url();
+  } catch (error) {
+    if (error instanceof StandvirtualDetailError) throw error;
+    throw new StandvirtualDetailError("STANDVIRTUAL_DETAIL_NAVIGATION", "Standvirtual detail navigation failed; try again later.");
+  }
 }

@@ -133,6 +133,23 @@ describe("listing review dashboard", () => {
     });
   });
 
+  it("captures Standvirtual details and refreshes persisted failure state", async () => {
+    const sv: ListingDetail = { ...detail, source: "standvirtual", title: "Volkswagen Golf", detailFacts: null,
+      detailCapture: { state: "not_captured", stale: true, canCapture: true, nextAttemptAt: null, lastErrorCode: null } };
+    const client = mockClient();
+    vi.mocked(client.get).mockResolvedValueOnce(sv).mockResolvedValue({ ...sv, detailCapture: { state: "failed", stale: true,
+      canCapture: false, nextAttemptAt: "2026-09-09T12:00:00Z", lastErrorCode: "STANDVIRTUAL_DETAIL_BLOCKED" } });
+    vi.mocked(client.captureDescription).mockRejectedValue(new Error("Standvirtual requires verification"));
+    render(<ListingDashboard client={client} initialListings={[sv]} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Review Volkswagen Golf" }));
+    await user.click(await screen.findByRole("button", { name: "Capture Standvirtual details" }));
+    expect(client.captureDescription).toHaveBeenCalledWith(sv.id);
+    expect(await screen.findByText(/Last capture failed: STANDVIRTUAL_DETAIL_BLOCKED/)).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Capture Standvirtual details" }).disabled).toBe(true);
+    expect(screen.getByText("Result card evidence")).toBeTruthy();
+  });
+
   it("clears unsaved inspector drafts when another listing opens", async () => {
     const other = { ...detail, id: 10, title: "2012 Volkswagen Golf Variant" };
     const client = mockClient();

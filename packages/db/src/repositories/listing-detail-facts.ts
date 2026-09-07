@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { FuelType, TransmissionType } from "@dealfinder/domain";
+import type { FuelType, TransmissionType, StructuredVehicleFacts, ListingSource, StandvirtualDetailEvidence } from "@dealfinder/domain";
 
-export interface ListingDetailStructuredFacts {
+export interface ListingDetailStructuredFacts extends StructuredVehicleFacts {
   year: number | null;
   mileageKm: number | null;
   make: string | null;
@@ -25,9 +25,10 @@ export interface ListingDetailFactValues {
   powerHp: number | null;
   /** Odometer found in the result card, kept separate from detail description text. */
   cardMileageKm?: number | null;
+  cardFacts?: Omit<ListingDetailFactValues, "cardFacts" | "cardMileageKm">;
 }
 
-export type ListingDetailFactSource = "facebook_structured" | "description" | "card" | "none";
+export type ListingDetailFactSource = "standvirtual_structured" | "facebook_structured" | "description" | "card" | "none";
 
 export interface ListingDetailMileageSources {
   structuredKm: number | null;
@@ -39,6 +40,8 @@ export interface ListingDetailMileageSources {
 }
 
 export interface ListingDetailFactSnapshot {
+  source: ListingSource;
+  evidence: StandvirtualDetailEvidence | null;
   listingId: number;
   structuredFacts: ListingDetailStructuredFacts;
   textFacts: ListingDetailFactValues;
@@ -49,6 +52,8 @@ export interface ListingDetailFactSnapshot {
 }
 
 interface FactRow {
+  source: ListingSource;
+  evidence_json: string | null;
   listing_id: number;
   structured_facts_json: string;
   text_facts_json: string;
@@ -69,7 +74,9 @@ export class ListingDetailFactsRepository {
     structuredFacts: ListingDetailStructuredFacts,
     textFacts: ListingDetailFactValues,
     selectedFacts: ListingDetailFactValues,
-    capturedAt: string
+    capturedAt: string,
+    source: ListingSource = "facebook",
+    evidence: StandvirtualDetailEvidence | null = null
   ): ListingDetailFactSnapshot {
     if (!Number.isSafeInteger(listingId) || listingId < 1) throw new Error("Listing ID must be positive");
     timestamp(capturedAt);
@@ -85,24 +92,29 @@ export class ListingDetailFactsRepository {
         !conflicts.includes("mileageKm")) {
       conflicts.push("mileageKm");
     }
+    if (textFacts.cardFacts) for (const field of FACT_FIELDS) {
+      const card = textFacts.cardFacts[field];
+      if (structuredFacts[field] != null && card != null && !sameFact(structuredFacts[field], card) && !conflicts.includes(field)) conflicts.push(field);
+    }
     this.database.prepare(`
       INSERT INTO listing_detail_facts (
         listing_id, structured_facts_json, text_facts_json,
-        selected_facts_json, conflicts_json, captured_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        selected_facts_json, conflicts_json, captured_at, source, evidence_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(listing_id) DO UPDATE SET
         structured_facts_json = excluded.structured_facts_json,
         text_facts_json = excluded.text_facts_json,
         selected_facts_json = excluded.selected_facts_json,
         conflicts_json = excluded.conflicts_json,
-        captured_at = excluded.captured_at
+        captured_at = excluded.captured_at,
+        source = excluded.source, evidence_json = excluded.evidence_json
     `).run(
       listingId,
       JSON.stringify(structuredFacts),
       JSON.stringify(textFacts),
       JSON.stringify(selectedFacts),
       JSON.stringify(conflicts),
-      capturedAt
+      capturedAt, source, evidence === null ? null : JSON.stringify(evidence)
     );
     return this.get(listingId) as ListingDetailFactSnapshot;
   }
@@ -110,7 +122,7 @@ export class ListingDetailFactsRepository {
   public get(listingId: number): ListingDetailFactSnapshot | undefined {
     const row = this.database.prepare(`
       SELECT listing_id, structured_facts_json, text_facts_json,
-             selected_facts_json, conflicts_json, captured_at
+             selected_facts_json, conflicts_json, captured_at, source, evidence_json
       FROM listing_detail_facts WHERE listing_id = ?
     `).get(listingId) as unknown as FactRow | undefined;
     if (row === undefined) return undefined;
@@ -129,7 +141,8 @@ export class ListingDetailFactsRepository {
     const cardKm = textFacts.cardMileageKm ?? null;
     const selectedKm = selectedFacts.mileageKm;
     return {
-      listingId: row.listing_id,
+      listingId: row.listing_id, source: row.source,
+      evidence: row.evidence_json === null ? null : parseObject<StandvirtualDetailEvidence>(row.evidence_json, "detail evidence"),
       structuredFacts,
       textFacts,
       selectedFacts,
@@ -138,7 +151,7 @@ export class ListingDetailFactsRepository {
         descriptionKm,
         cardKm,
         selectedKm,
-        source: structuredKm !== null ? "facebook_structured" :
+        source: structuredKm !== null ? (row.source === "standvirtual" ? "standvirtual_structured" : "facebook_structured") :
           descriptionKm !== null ? "description" : cardKm !== null ? "card" : "none",
         conflict: conflicts.includes("mileageKm")
       },

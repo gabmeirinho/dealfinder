@@ -83,12 +83,14 @@ describe("Standvirtual scanner", () => {
     const duplicates = {
       recomputeAll: vi.fn(async () => [])
     } as unknown as DuplicateDetectionService;
+    const afterBroadScan = vi.fn(async () => undefined);
     const processingWake = vi.fn();
     const scanner = new StandvirtualScanner({
       database: () => database as DatabaseConnection,
       scoring: new DealScoringService({ database: () => database as DatabaseConnection }),
       duplicates,
       processingWake,
+      afterBroadScan,
       collect,
       now: () => new Date("2026-09-05T12:00:00.000Z")
     });
@@ -119,6 +121,7 @@ describe("Standvirtual scanner", () => {
     expect(database.rawCandidates.get("standvirtual", "GOLF6")).toBeDefined();
     expect(duplicates.recomputeAll).toHaveBeenCalledOnce();
     expect(processingWake).toHaveBeenCalledOnce();
+    expect(afterBroadScan).toHaveBeenCalledTimes(searchScope === "broad" ? 1 : 0);
     const aboveBudget = database.listings.getBySource("standvirtual", "GOLF6")!;
     expect(database.normalizedVehicles.getMatch(aboveBudget.id, search.id)?.eligible).toBe(false);
     const eligible = database.listings.getBySource("standvirtual", "GOLF0")!;
