@@ -75,6 +75,21 @@ Choose **Under budget** and apply filters to show only known normalized prices
 within the selected search’s maximum price. Leave it off to review unknown prices
 and other listings that need more information. Confirmed hard mismatches remain hidden.
 
+After a broad scan, up to five active Standvirtual candidates that pass the hard
+criteria are detail-captured in recommendation order using the open controlled
+browser. Captures run sequentially. A closed browser or access challenge stops
+the batch without losing the collected listings. Successful captures have a
+seven-day cooldown; failures retry after one day, including across restarts.
+
+In the inspector, **Standvirtual details** separates result-card evidence from
+captured warranty, inspection, equipment, origin, seller type, and structured
+vehicle facts. **Capture Standvirtual details** is available when details are
+missing or stale and the cooldown has elapsed. Captures update facts, conflicts,
+match eligibility, risks, and recommendations together; human corrections take
+precedence. Seller identities, contacts, profiles, and payment details are not
+retained. Database migration 25 adds source-aware detail evidence while preserving
+existing Facebook snapshots.
+
 The probe supports the same policies without writing to the database:
 
 ```sh

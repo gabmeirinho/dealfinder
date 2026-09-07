@@ -6,7 +6,8 @@ import {
   FacebookNavigationError,
   isTransientPageReadError,
   marketplaceQueryFromUrl,
-  navigateMarketplacePage
+  navigateMarketplacePage,
+  navigateStandvirtualDetailPage
 } from "./playwright-adapter.js";
 
 describe("Playwright Marketplace navigation", () => {
@@ -139,5 +140,24 @@ describe("Playwright Marketplace navigation", () => {
       new Error("Execution context was destroyed, most likely because of a navigation")
     )).toBe(true);
     expect(isTransientPageReadError(new Error("Invalid selector"))).toBe(false);
+  });
+});
+
+describe("Standvirtual detail navigation", () => {
+  const url = "https://www.standvirtual.com/carros/anuncio/golf-ID6Example.html";
+  it("uses a bounded navigation and requires the selected listing after redirects", async () => {
+    const goto = vi.fn(async () => null);
+    const page = { goto, url: () => url } as unknown as Page;
+    expect(await navigateStandvirtualDetailPage(page, `${url}?tracking=discard`)).toBe(url);
+    expect(goto).toHaveBeenCalledWith(url, { waitUntil: "domcontentloaded", timeout: 15000 });
+    await expect(navigateStandvirtualDetailPage({ goto, url: () => url.replace("6Example", "6Other") } as unknown as Page, url))
+      .rejects.toMatchObject({ code: "STANDVIRTUAL_DETAIL_REDIRECT" });
+  });
+  it("rejects unsafe targets before navigation and reports retryable navigation failures", async () => {
+    const goto = vi.fn(async () => { throw new Error("Timeout"); });
+    const page = { goto, url: () => url } as unknown as Page;
+    await expect(navigateStandvirtualDetailPage(page, "https://evil.example/listing")).rejects.toThrow();
+    expect(goto).not.toHaveBeenCalled();
+    await expect(navigateStandvirtualDetailPage(page, url)).rejects.toMatchObject({ code: "STANDVIRTUAL_DETAIL_NAVIGATION" });
   });
 });

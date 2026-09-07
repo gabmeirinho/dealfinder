@@ -64,13 +64,13 @@ describe("listing review dashboard", () => {
     expect(client.list).toHaveBeenLastCalledWith({ risk: false, archived: false });
   });
 
-  it("requests the selected assessment dimension when applying filters", async () => {
+  it.each(["personal_fit", "best_deal"])("requests the %s dimension when applying filters", async (sort) => {
     const client = mockClient();
     render(<ListingDashboard client={client} initialListings={[detail]} />);
     const user = userEvent.setup();
-    await user.selectOptions(screen.getByLabelText("Sort listings"), "personal_fit");
+    await user.selectOptions(screen.getByLabelText("Sort listings"), sort);
     await user.click(screen.getByRole("button", { name: "Apply filters" }));
-    expect(client.list).toHaveBeenCalledWith({ risk: false, archived: false, sort: "personal_fit" });
+    expect(client.list).toHaveBeenCalledWith({ risk: false, archived: false, sort });
   });
 
   it("explains missing hard facts without presenting a filter failure", async () => {
@@ -131,6 +131,23 @@ describe("listing review dashboard", () => {
       risk: true,
       archived: false
     });
+  });
+
+  it("captures Standvirtual details and refreshes persisted failure state", async () => {
+    const sv: ListingDetail = { ...detail, source: "standvirtual", title: "Volkswagen Golf", detailFacts: null,
+      detailCapture: { state: "not_captured", stale: true, canCapture: true, nextAttemptAt: null, lastErrorCode: null } };
+    const client = mockClient();
+    vi.mocked(client.get).mockResolvedValueOnce(sv).mockResolvedValue({ ...sv, detailCapture: { state: "failed", stale: true,
+      canCapture: false, nextAttemptAt: "2026-09-09T12:00:00Z", lastErrorCode: "STANDVIRTUAL_DETAIL_BLOCKED" } });
+    vi.mocked(client.captureDescription).mockRejectedValue(new Error("Standvirtual requires verification"));
+    render(<ListingDashboard client={client} initialListings={[sv]} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Review Volkswagen Golf" }));
+    await user.click(await screen.findByRole("button", { name: "Capture Standvirtual details" }));
+    expect(client.captureDescription).toHaveBeenCalledWith(sv.id);
+    expect(await screen.findByText(/Last capture failed: STANDVIRTUAL_DETAIL_BLOCKED/)).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Capture Standvirtual details" }).disabled).toBe(true);
+    expect(screen.getByText("Result card evidence")).toBeTruthy();
   });
 
   it("clears unsaved inspector drafts when another listing opens", async () => {

@@ -39,7 +39,7 @@ export interface DeepSeekClientOptions {
 const SYSTEM_PROMPT = `You enrich vehicle marketplace listings. Return JSON only.
 Never return seller identity, contact details, URLs, account data, diagnostics, credentials, or quoted evidence.
 When sourceFacts.mileageKm is present, use its selectedKm as the primary mileage. If conflict is true, retain the selected value but add the mileage uncertainty.
-When sourceFacts.structuredVehicle contains a non-null value, treat that Facebook structured value as authoritative and do not replace it with an inference. Only fill fields that Facebook left unknown.
+When sourceFacts.structuredVehicle contains a non-null value, treat that marketplace structured value as authoritative and do not replace it with an inference. Only fill fields that the marketplace left unknown.
 Use exactly this object shape and no additional fields:
 {"schemaVersion":1,"vehicle":{"make":null,"model":null,"variant":null,"year":null,"mileageKm":null,"fuel":null,"transmission":null,"powerHp":null},"price":{"amountCents":null,"interpretation":"unknown"},"sellerType":null,"indicators":{"financing":false,"monthlyPayment":false,"deposit":false,"damaged":false,"imported":false},"uncertainties":[]}
 Allowed fuel values: petrol, diesel, hybrid, plug_in_hybrid, electric, lpg, other, or null.
@@ -194,8 +194,8 @@ function safeMileage(value: unknown): number | null {
     : null;
 }
 
-function safeMileageSource(value: unknown): "facebook_structured" | "description" | "card" | "none" {
-  return value === "facebook_structured" || value === "description" || value === "card" ? value : "none";
+function safeMileageSource(value: unknown): "standvirtual_structured" | "facebook_structured" | "description" | "card" | "none" {
+  return value === "standvirtual_structured" || value === "facebook_structured" || value === "description" || value === "card" ? value : "none";
 }
 
 function safePower(value: unknown): number | null {

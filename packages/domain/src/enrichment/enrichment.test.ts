@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createEnrichmentInput, parseVehicleEnrichmentJson, validateVehicleEnrichment } from "./index.js";
+import { applyAuthoritativeStructuredFacts, createEnrichmentInput, parseVehicleEnrichmentJson, validateVehicleEnrichment } from "./index.js";
 import { normalizeVehicleFacts } from "../normalization/index.js";
 
 const valid = {
@@ -83,4 +83,14 @@ describe("vehicle enrichment contract", () => {
       conflict: true
     });
   });
+});
+
+it("retains explicit Standvirtual origin and seller metadata over AI output, while honoring corrections", () => {
+  const facts = normalizeVehicleFacts({ title: "BMW 320d", description: null, displayedPrice: "24900 €", cardFacts: ["Importado", "Particular"], referenceYear: 2026,
+    structuredSource: "standvirtual", structuredFacts: { imported: false, sellerType: "dealer" } });
+  const ai = parseVehicleEnrichmentJson(JSON.stringify({ ...valid, sellerType: "private", indicators: { ...valid.indicators, imported: true } }));
+  expect(applyAuthoritativeStructuredFacts(ai, facts, { imported: false, sellerType: "dealer" }))
+    .toMatchObject({ sellerType: "dealer", indicators: { imported: false } });
+  expect(facts.evidence.imported).toEqual(["Standvirtual structured: national"]);
+  expect(applyAuthoritativeStructuredFacts(ai, { ...facts, seller: { ...facts.seller, type: "private" } }, { sellerType: "dealer" }, new Set(["sellerType"])).sellerType).toBe("private");
 });

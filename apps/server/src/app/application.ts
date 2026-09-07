@@ -171,6 +171,13 @@ export function createApplicationRuntime(
     database: getDatabase,
     scoring,
     duplicates: duplicateDetection,
+    afterBroadScan: async (searchId) => {
+      try {
+        await listingDetailCapture.captureEligible(searchId, 5, "standvirtual");
+      } catch (error) {
+        logger.warn("Standvirtual detail capture batch unavailable", { searchId, errorType: error instanceof Error ? error.name : "unknown" });
+      }
+    },
     processingWake: () => enrichment.wake()
   });
   const facebookHealth = new FacebookHealthService({
@@ -199,6 +206,8 @@ export function createApplicationRuntime(
       name: "database",
       start: () => {
         database = openDatabase({ filename: options.config.paths.sqlitePath });
+        const recoveryAt = new Date();
+        database.listingDetailCaptureAttempts.recoverInterrupted(recoveryAt.toISOString(), new Date(recoveryAt.getTime() + 86_400_000).toISOString());
         const backfilled = new ListingIngestionService(getDatabase)
           .backfillClassifications(new Date().toISOString());
         if (backfilled > 0) {

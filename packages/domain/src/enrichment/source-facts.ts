@@ -27,6 +27,8 @@ export function applyAuthoritativeStructuredFacts(
 
   return {
     ...enrichment,
+    sellerType: corrected.has("sellerType") ? normalized.seller.type : structured?.sellerType ?? enrichment.sellerType,
+    indicators: { ...enrichment.indicators, imported: structured?.imported ?? enrichment.indicators.imported },
     vehicle: {
       make: choose("make", enrichment.vehicle.make, normalized.make, structured?.make),
       model: choose("model", enrichment.vehicle.model, normalized.model, structured?.model),

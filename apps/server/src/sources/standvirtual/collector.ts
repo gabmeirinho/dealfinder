@@ -84,7 +84,7 @@ export async function collectStandvirtualResults(
 
   return {
     source: "standvirtual" as const,
-    parserVersion: 1,
+    parserVersion: 2,
     scope: "paginated" as const,
     order: "newest_first" as const,
     recognizedCards,

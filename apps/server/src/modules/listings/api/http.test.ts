@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { Server } from "node:http";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -43,13 +44,14 @@ describe("listing review API", () => {
     });
     listingId = result.listings[0]?.id as number;
     const workflow = new ListingReviewService(() => database);
+    let detailUrl = "https://www.facebook.com/marketplace/item/100000000000099/";
     const browser = {
-      navigateListing: async () => "https://www.facebook.com/marketplace/item/100000000000099/",
+      navigateListing: async (url: string) => { detailUrl = url; return url; },
       snapshotListingDetail: async () => ({
-        url: "https://www.facebook.com/marketplace/item/100000000000099/",
+        url: detailUrl,
         title: "Volkswagen Golf 2020",
         bodyText: "Particular, caixa manual, revisão feita.",
-        html: `<section data-testid="marketplace-item-description">Particular, caixa manual, revisão feita.</section>`,
+        html: detailUrl.includes("standvirtual.com") ? readFileSync(new URL("../../../../test/fixtures/standvirtual/detail/valid.html", import.meta.url), "utf8") : `<section data-testid="marketplace-item-description">Particular, caixa manual, revisão feita.</section>`,
         loading: false
       })
     } as unknown as BrowserManager;
@@ -95,6 +97,22 @@ describe("listing review API", () => {
     expect((await fetch(`${baseUrl}/api/listings?underBudget=true`)).status).toBe(400);
   });
 
+  it("captures Standvirtual evidence through the existing endpoint and returns persisted cooldown status", async () => {
+    const searchId = database.listings.listSearchIds(listingId)[0]!;
+    const result = new ListingIngestionService(() => database).ingestScan({ searchId, observedAt: "2026-08-24T10:02:00Z",
+      initialScan: true, completeSnapshot: false, candidates: [{ source: "standvirtual", sourceListingId: "6Detail",
+      url: "https://www.standvirtual.com/carros/anuncio/golf-ID6Detail.html", title: "Volkswagen Golf", displayedPrice: "5500 €",
+      description: null, location: "Lisboa", thumbnailUrl: null, rawCardFacts: ["2009", "100 000 km"] }] });
+    const id = result.listings[0]!.id;
+    const response = await fetch(`${baseUrl}/api/listings/${id}/description`, { method: "POST" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ listing: { detailFacts: { source: "standvirtual", evidence: { warranty: "18 Meses" } },
+      detailCapture: { state: "succeeded", lastErrorCode: null }, cardEvidence: { cardFacts: ["2009", "100 000 km"] } } });
+    const repeat = await fetch(`${baseUrl}/api/listings/${id}/description`, { method: "POST" });
+    expect(repeat.status).toBe(429);
+    expect(await repeat.json()).toMatchObject({ code: "DETAIL_CAPTURE_COOLDOWN" });
+  });
+
   it("serves separate assessments and validates explicit sort dimensions", async () => {
     const at = "2026-08-24T10:01:00.000Z";
     const claim = database.enrichmentProcessing.claimNext(at)!;
@@ -107,7 +125,7 @@ describe("listing review API", () => {
       uncertainties: []
     }, at, null);
     new DealScoringService({ database: () => database }).recomputeAll(at);
-    for (const sort of ["recent", "market_value", "personal_fit", "confidence"]) {
+    for (const sort of ["best_deal", "recent", "market_value", "personal_fit", "confidence"]) {
       const response = await getJson<{ listings: Array<{ score: unknown }> }>(`/api/listings?sort=${sort}`);
       expect(response.listings[0]?.score).toMatchObject({
         version: 2, marketValue: { status: "insufficient_data", discountPercent: null },

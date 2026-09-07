@@ -8,13 +8,16 @@ import {
   applyReusableRules,
   assessVehicleRisk,
   evaluateVehicleMatch,
-  normalizeVehicleFacts
+  normalizeVehicleFacts,
+  type StructuredVehicleFacts
 } from "@dealfinder/domain";
+
+import { canonicalStandvirtualDetailUrl, parseStandvirtualDetail, StandvirtualDetailError } from "../../../sources/standvirtual/detail-parser.js";
+import { DealScoringService } from "../../scoring/service.js";
 
 import type { BrowserManager } from "../../browser/index.js";
 import {
-  parseFacebookListingDetail,
-  type FacebookListingStructuredFacts
+  parseFacebookListingDetail
 } from "../../../sources/facebook/detail-parser/index.js";
 
 export interface ListingDetailCaptureServiceOptions {
@@ -49,6 +52,7 @@ export class ListingDetailCaptureService {
   readonly #processingWake: (() => void) | undefined;
   readonly #now: () => Date;
   #captureTail: Promise<void> = Promise.resolve();
+  #recovered = false;
 
   public constructor(options: ListingDetailCaptureServiceOptions) {
     this.#database = options.database;
@@ -64,14 +68,16 @@ export class ListingDetailCaptureService {
   /** Captures a small, ordered batch after a search scan without flooding Facebook. */
   public async captureEligible(
     searchId: string,
-    limit: number = DETAIL_CAPTURE_BATCH_SIZE
+    limit: number = DETAIL_CAPTURE_BATCH_SIZE,
+    source: "facebook" | "standvirtual" = "facebook"
   ): Promise<ListingDetailCaptureBatchResult> {
-    return await this.withCaptureLock(() => this.captureEligibleWithLock(searchId, limit));
+    return await this.withCaptureLock(() => this.captureEligibleWithLock(searchId, limit, source));
   }
 
   private async captureEligibleWithLock(
     searchId: string,
-    limit: number
+    limit: number,
+    source: "facebook" | "standvirtual"
   ): Promise<ListingDetailCaptureBatchResult> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 25) {
       throw new Error("Detail capture batch size must be an integer from 1 to 25");
@@ -92,7 +98,7 @@ export class ListingDetailCaptureService {
       const listingId = database.listingDetailCaptureAttempts.findNextEligible(
         searchId,
         at,
-        offsetTimestamp(at, -DETAIL_CAPTURE_SUCCESS_COOLDOWN_MS)
+        offsetTimestamp(at, -DETAIL_CAPTURE_SUCCESS_COOLDOWN_MS), source
       );
       if (listingId === undefined) break;
       attempted += 1;
@@ -112,16 +118,16 @@ export class ListingDetailCaptureService {
 
   private async captureWithAttempt(listingId: number): Promise<ListingDetailCaptureResult> {
     const database = this.#database();
-    if (database.listings.get(listingId) === undefined) throw new Error(`Listing not found: ${listingId}`);
+    const listing = database.listings.get(listingId);
+    if (listing === undefined) throw new Error(`Listing not found: ${listingId}`);
+    const previous = database.listingDetailCaptureAttempts.get(listingId);
+    if (listing.source === "standvirtual" && previous && (previous.state === "processing" || previous.nextAttemptAt > this.#now().toISOString())) {
+      throw new StandvirtualDetailError("DETAIL_CAPTURE_COOLDOWN", `Detail capture is available after ${previous.nextAttemptAt}.`);
+    }
     const attemptedAt = this.#now().toISOString();
     database.listingDetailCaptureAttempts.begin(listingId, attemptedAt);
     try {
       const result = await this.captureListing(listingId);
-      database.listingDetailCaptureAttempts.completeSuccess(
-        listingId,
-        result.capturedAt,
-        offsetTimestamp(result.capturedAt, DETAIL_CAPTURE_SUCCESS_COOLDOWN_MS)
-      );
       return result;
     } catch (error: unknown) {
       const completedAt = this.#now().toISOString();
@@ -141,6 +147,11 @@ export class ListingDetailCaptureService {
     this.#captureTail = new Promise<void>((resolve) => { release = resolve; });
     await previous;
     try {
+      if (!this.#recovered) {
+        const now = this.#now().toISOString();
+        this.#database().listingDetailCaptureAttempts.recoverInterrupted(now, offsetTimestamp(now, DETAIL_CAPTURE_FAILURE_COOLDOWN_MS));
+        this.#recovered = true;
+      }
       return await operation();
     } finally {
       release();
@@ -151,8 +162,8 @@ export class ListingDetailCaptureService {
     const database = this.#database();
     const listing = database.listings.get(listingId);
     if (listing === undefined) throw new Error(`Listing not found: ${listingId}`);
-    if (listing.source !== "facebook") throw new Error("Only Facebook listing details are supported");
-    if (!isSafeFacebookListingUrl(listing.listingUrl)) {
+    if (listing.source === "standvirtual") canonicalStandvirtualDetailUrl(listing.listingUrl);
+    if (listing.source === "facebook" && !isSafeFacebookListingUrl(listing.listingUrl)) {
       throw new Error("Listing URL is not a safe Facebook Marketplace URL");
     }
     if (database.listingClassifications.get(listingId)?.decision === "exclude") {
@@ -163,16 +174,20 @@ export class ListingDetailCaptureService {
 
     await this.#browser().navigateListing(listing.listingUrl);
     const snapshot = await this.#browser().snapshotListingDetail();
-    if (!sameFacebookListingUrl(listing.listingUrl, snapshot.url)) {
+    if (listing.source === "facebook" && !sameFacebookListingUrl(listing.listingUrl, snapshot.url)) {
       throw new Error("Facebook listing detail navigation did not remain on the selected listing");
     }
-    const detail = parseFacebookListingDetail(snapshot.html);
+    if (listing.source === "standvirtual" && snapshot.loading) throw new StandvirtualDetailError("STANDVIRTUAL_DETAIL_NOT_READY", "The detail page is still loading; try again later.");
+    const standvirtual = listing.source === "standvirtual"
+      ? parseStandvirtualDetail(snapshot.html, listing.listingUrl, snapshot.url, this.#now().getUTCFullYear()) : null;
+    const detail = standvirtual ?? parseFacebookListingDetail(snapshot.html);
     const capturedAt = this.#now().toISOString();
     const result = database.transaction(() => {
       const normalizeInput = {
         ...stored.facts.original,
-        description: detail.description ?? stored.facts.original.description,
+        description: detail.description ?? (standvirtual ? database.rawCandidates.listObservations(listing.rawCandidateId).at(-1)?.description ?? null : stored.facts.original.description),
         referenceYear: new Date(capturedAt).getUTCFullYear(),
+        structuredSource: listing.source,
         seller: stored.facts.seller
       };
       const descriptionNormalized = normalizeVehicleFacts({ ...normalizeInput, cardFacts: [] });
@@ -183,13 +198,14 @@ export class ListingDetailCaptureService {
       }), database.corrections.listApprovedRules());
       if (detail.description !== null) {
         database.listingDetailDescriptions.save(listingId, detail.description, capturedAt);
-      }
+      } else if (standvirtual) database.listingDetailDescriptions.delete(listingId);
       database.listingDetailFacts.save(
         listingId,
         structuredFactValues(detail.structuredFacts),
-        normalizedFactValues(descriptionNormalized, cardNormalized.mileageKm),
+        { ...normalizedFactValues(descriptionNormalized, cardNormalized.mileageKm),
+          ...(standvirtual ? { cardFacts: normalizedFactValues(cardNormalized) } : {}) },
         normalizedFactValues(normalized),
-        capturedAt
+        capturedAt, listing.source, standvirtual?.evidence ?? null
       );
       database.normalizedVehicles.saveFacts(
         listingId,
@@ -213,6 +229,9 @@ export class ListingDetailCaptureService {
         database.dealScores.delete(listingId, searchId);
       }
       if (plausible) database.enrichmentProcessing.enqueue(listingId, capturedAt);
+      if (standvirtual) new DealScoringService({ database: this.#database }).recomputeAll(capturedAt);
+      database.listingDetailCaptureAttempts.completeSuccess(listingId, capturedAt,
+        offsetTimestamp(capturedAt, DETAIL_CAPTURE_SUCCESS_COOLDOWN_MS));
       return { plausible };
     });
     if (result.plausible) this.#processingWake?.();
@@ -226,9 +245,11 @@ export class ListingDetailCaptureService {
 }
 
 function structuredFactValues(
-  facts: FacebookListingStructuredFacts | undefined
+  facts: (StructuredVehicleFacts & { condition?: string | null; listingCondition?: string | null }) | undefined
 ): ListingDetailStructuredFacts {
   return {
+    ...(facts?.sellerType === undefined ? {} : { sellerType: facts.sellerType }),
+    ...(facts?.imported === undefined ? {} : { imported: facts.imported }),
     year: facts?.year ?? null,
     mileageKm: facts?.mileageKm ?? null,
     make: facts?.make ?? null,
@@ -300,6 +321,7 @@ function isBrowserUnavailable(error: unknown): boolean {
     "BROWSER_NOT_OPEN",
     "BROWSER_BUSY",
     "BROWSER_DETAIL_UNSUPPORTED",
-    "BROWSER_RESUME_REQUIRED"
+    "BROWSER_RESUME_REQUIRED",
+    "STANDVIRTUAL_DETAIL_BLOCKED"
   ].includes(error.code);
 }

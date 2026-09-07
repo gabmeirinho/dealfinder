@@ -272,7 +272,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .inbox-register div { display: grid; gap: 5px; min-width: 66px; }
 .inbox-register dt { color: var(--muted); font-family: var(--utility); font-size: 0.66rem; text-transform: uppercase; }
 .inbox-register dd { margin: 0; color: var(--navy); font-family: var(--utility); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
-.listing-filters { display: grid; grid-template-columns: minmax(160px, 1fr) 140px 130px 130px auto auto 180px auto; gap: 12px; align-items: end; padding: 18px 0; border-top: 3px solid var(--navy); border-bottom: 1px solid var(--line); }
+.listing-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; padding: 18px 0; border-top: 3px solid var(--navy); border-bottom: 1px solid var(--line); }
 .listing-filters label:not(.review-check), .workflow-control label, .correction-form label:not(.review-check), .notes-section label { display: grid; gap: 7px; color: var(--navy); font-size: 0.72rem; font-weight: 700; }
 .listing-filters input[type="text"], .listing-filters input:not([type]), .listing-filters select, .workflow-control input, .correction-form input, .correction-form select, .notes-section textarea { width: 100%; min-height: 43px; padding: 9px 11px; color: var(--ink); background: #fff; border: 1px solid #9db1ab; border-radius: 0; }
 .review-check { display: inline-flex; gap: 8px; align-items: center; min-height: 43px; color: var(--navy); cursor: pointer; font-size: 0.73rem; font-weight: 700; }
@@ -288,6 +288,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .listing-inbox { min-width: 0; margin: 0; padding: 0; list-style: none; border-right: 1px solid var(--line); }
 .listing-inbox-row { position: relative; border-bottom: 1px solid var(--line); }
 .listing-inbox-row > button { display: grid; width: 100%; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 16px; align-items: start; padding: 22px 18px 22px 0; color: var(--ink); background: rgba(245, 248, 246, 0.75); border: 0; cursor: pointer; text-align: left; }
+.listing-row-context { grid-column: 2 / -1; font-size: 0.78rem; line-height: 1.6; }
 .listing-inbox-row > button:hover, .listing-inbox-row.is-selected > button { background: #fff; }
 .listing-inbox-row.is-selected > button { box-shadow: inset 4px 0 0 var(--signal); }
 .listing-score { display: grid; align-content: center; min-height: 60px; color: var(--paper); background: var(--navy); font-family: var(--utility); font-size: 1.25rem; font-weight: 700; text-align: center; }
@@ -313,6 +314,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .inspector-header p { margin: 0; color: #b9cbc7; }
 .inspector-header .secondary-action { color: var(--paper); border-color: #6c8589; }
 .listing-inspector > .listing-risk { display: grid; gap: 6px; color: #7b2f27; background: #f4dfda; }
+.source-detail-evidence .listing-risk, .fact-comparison .listing-risk { display: grid; gap: 6px; margin-block: 18px; }
 .listing-risk strong { font-family: var(--utility); font-size: 0.72rem; letter-spacing: 0.04em; }
 .listing-risk span { font-size: 0.78rem; }
 .workflow-actions { display: flex; flex-wrap: wrap; margin-bottom: 18px; }
@@ -450,6 +452,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
   .listing-heading h1 { font-size: clamp(3.2rem, 15vw, 4.7rem); }
   .inbox-register { justify-content: start; }
   .listing-filters { grid-template-columns: 1fr 1fr; }
+  .listing-filters .review-check { grid-row: auto; }
   .listing-filters > label:first-child { grid-column: 1 / -1; }
   .listing-filters .primary-action { grid-column: 1 / -1; }
   .fact-table { grid-template-columns: repeat(2, minmax(0, 1fr)); }

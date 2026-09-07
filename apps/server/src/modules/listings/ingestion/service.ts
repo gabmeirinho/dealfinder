@@ -136,6 +136,7 @@ export class ListingIngestionService {
           displayedPrice: candidate.displayedPrice,
           cardFacts: candidate.rawCardFacts,
           referenceYear: new Date(input.observedAt).getUTCFullYear(),
+          structuredSource: candidate.source,
           ...(candidate.seller === undefined ? {} : { seller: candidate.seller }),
           ...(detailFacts === undefined ? {} : { structuredFacts: detailFacts.structuredFacts })
         }), approvedRules);

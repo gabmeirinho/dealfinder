@@ -12,7 +12,7 @@ export interface EnrichmentInput {
       descriptionKm: number | null;
       cardKm: number | null;
       selectedKm: number | null;
-      source: "facebook_structured" | "description" | "card" | "none";
+      source: "standvirtual_structured" | "facebook_structured" | "description" | "card" | "none";
       conflict: boolean;
     };
     structuredVehicle?: {

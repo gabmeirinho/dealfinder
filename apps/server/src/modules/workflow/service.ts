@@ -5,6 +5,8 @@ import type {
 } from "@dealfinder/db";
 import {
   applyFactCorrections,
+  assessRecommendation,
+  type RecommendationAssessment,
   type FactCorrection,
   type ListingSource,
   type NormalizedVehicleFacts
@@ -20,7 +22,7 @@ export interface ListingInboxFilters {
   archived?: boolean;
   query?: string;
   source?: ListingSource;
-  sort?: "recent" | "market_value" | "personal_fit" | "confidence";
+  sort?: "best_deal" | "recent" | "market_value" | "personal_fit" | "confidence";
 }
 
 export class ListingReviewService {
@@ -86,9 +88,13 @@ export class ListingReviewService {
       WHERE ${conditions.join(" AND ")}
       ORDER BY ${ranking}
                listings.last_seen_at DESC, listings.id DESC
-      LIMIT 250
+      ${filters.sort === "best_deal" ? "" : "LIMIT 250"}
     `).all(...parameters) as unknown as Array<{ id: number }>;
-    return rows.map(({ id }) => this.summary(id, filters.sort, filters.searchId));
+    const summaries = rows.map(({ id }) => this.summary(id, filters.sort, filters.searchId));
+    if (filters.sort === "best_deal") summaries.sort((left, right) =>
+      (right.recommendation as RecommendationAssessment).orderingKey - (left.recommendation as RecommendationAssessment).orderingKey ||
+      String(right.lastSeenAt).localeCompare(String(left.lastSeenAt)) || Number(right.id) - Number(left.id));
+    return summaries.slice(0, 250);
   }
 
   public detail(listingId: number): Record<string, unknown> | undefined {
@@ -105,7 +111,7 @@ export class ListingReviewService {
     const scores = searchIds.flatMap((searchId) => {
       const score = database.dealScores.get(listingId, searchId);
       if (score === undefined) return [];
-      return [{ ...score, searchName: database.searches.get(searchId)?.name ?? "Deleted search" }];
+      return [{ ...score, score: { ...score.score, recommendation: this.recommendation(listingId, searchId) }, searchName: database.searches.get(searchId)?.name ?? "Deleted search" }];
     }).sort((left, right) => left.searchName.localeCompare(right.searchName) || left.searchId.localeCompare(right.searchId));
     const duplicate = database.duplicates.listGroups().find((group) =>
       group.members.some((member) => member.listingId === listingId)
@@ -120,6 +126,8 @@ export class ListingReviewService {
       normalizedFacts: stored?.facts ?? null,
       effectiveFacts: effectiveFacts ?? null,
       detailFacts: database.listingDetailFacts.get(listingId) ?? null,
+      cardEvidence: observation ? { description: observation.description, cardFacts: observation.rawCardFacts, observedAt: observation.observedAt } : null,
+      detailCapture: this.detailCaptureState(listingId),
       corrections: corrections.map((correction) => ({
         ...correction,
         proposal: database.corrections.getProposalForCorrection(correction.id) ?? null
@@ -199,6 +207,33 @@ export class ListingReviewService {
       : this.corrections.rejectRule(proposalId, decidedAt);
   }
 
+  private detailCaptureState(listingId: number) {
+    const database = this.database();
+    const attempt = database.listingDetailCaptureAttempts.get(listingId);
+    const snapshot = database.listingDetailFacts.get(listingId);
+    const now = Date.now();
+    const stale = snapshot === undefined || now - Date.parse(snapshot.capturedAt) >= 7 * 86_400_000;
+    return {
+      state: attempt?.state ?? "not_captured", stale,
+      canCapture: stale && attempt?.state !== "processing" && (attempt === undefined || Date.parse(attempt.nextAttemptAt) <= now),
+      nextAttemptAt: attempt?.nextAttemptAt ?? null, lastErrorCode: attempt?.lastErrorCode ?? null
+    };
+  }
+
+  private recommendation(listingId: number, searchId?: string): RecommendationAssessment {
+    const database = this.database();
+    const listing = database.listings.get(listingId)!;
+    const stored = database.normalizedVehicles.getFacts(listingId);
+    const facts = stored ? applyFactCorrections(stored.facts, database.corrections.listForListing(listingId)) : null;
+    return assessRecommendation({
+      facts, risk: database.normalizedVehicles.getRisk(listingId) ?? null,
+      score: searchId ? database.dealScores.get(listingId, searchId)?.score ?? null : null,
+      matchStatus: searchId ? database.normalizedVehicles.getMatch(listingId, searchId)?.status ?? "needs_information" : "needs_information",
+      budget: searchId ? database.searches.get(searchId)?.criteria.priceRange?.value ?? null : null,
+      lastSeenAt: listing.lastSeenAt, evaluatedAt: new Date().toISOString(), available: listing.availability === "active"
+    });
+  }
+
   private summary(listingId: number, sort: ListingInboxFilters["sort"] = "recent", filterSearchId?: string): Record<string, unknown> {
     const database = this.database();
     const listing = database.listings.get(listingId);
@@ -213,8 +248,10 @@ export class ListingReviewService {
     const matchStatus = matches.some((match) => match?.status === "matches") ? "matches" :
       matches.some((match) => match?.status === "needs_information") ? "needs_information" : "excluded";
     const scores = searchIds.map((searchId) => database.dealScores.get(listingId, searchId))
-      .filter((score) => score !== undefined);
-    const value = (stored: typeof scores[number]): number => sort === "market_value"
+      .filter((score) => score !== undefined)
+      .map((stored) => ({ ...stored, score: { ...stored.score, recommendation: this.recommendation(listingId, stored.searchId) } }));
+    const value = (stored: typeof scores[number]): number => sort === "best_deal"
+      ? stored.score.recommendation.orderingKey : sort === "market_value"
       ? stored.score.marketValue.discountPercent ?? -Infinity : sort === "personal_fit"
       ? stored.score.personalFit.percent ?? -Infinity : sort === "confidence"
       ? ({ high: 3, medium: 2, low: 1 }[stored.score.confidence.level]) : 0;
@@ -222,6 +259,9 @@ export class ListingReviewService {
       const difference = value(right) - value(left);
       return (Number.isNaN(difference) ? 0 : difference) || left.searchId.localeCompare(right.searchId);
     })[0] ?? null;
+    const fallbackRecommendation = topScore === null ? searchIds.map((searchId) => ({
+      searchId, assessment: this.recommendation(listingId, searchId)
+    })).sort((left, right) => right.assessment.orderingKey - left.assessment.orderingKey || left.searchId.localeCompare(right.searchId))[0] : undefined;
     const observation = latestObservation(database, listing.rawCandidateId);
     return {
       id: listing.id,
@@ -243,7 +283,8 @@ export class ListingReviewService {
         const search = database.searches.get(id);
         return search?.criteria.searchScope === "broad" ? [search.name] : [];
       }),
-      assessmentSearchName: topScore === null ? null : database.searches.get(topScore.searchId)?.name ?? null,
+      recommendation: topScore?.score.recommendation ?? fallbackRecommendation?.assessment ?? this.recommendation(listingId),
+      assessmentSearchName: database.searches.get(topScore?.searchId ?? fallbackRecommendation?.searchId ?? "")?.name ?? null,
       score: matchStatus === "matches" ? topScore?.score ?? null : null,
       processing: database.enrichmentProcessing.getQueueItem(listingId) ?? null,
       classification: database.listingClassifications.get(listingId) ?? null

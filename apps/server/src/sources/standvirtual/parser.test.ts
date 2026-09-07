@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseStandvirtualResults, validateSearchUrl } from "./parser.js";
 
@@ -42,7 +43,7 @@ describe("Standvirtual feasibility parser", () => {
   });
 
   it("does not infer asking price from monthly payments or a currency-less number", () => {
-    for (const markup of [card().replace("18 500", "250 €/mês"), card().replace("<p>EUR</p>", "")]) {
+    for (const markup of [card().replace("18 500", "250 €/mês"), card().replace("<p>EUR</p>", ""), card().replace("<h3>18 500</h3>", '<h3 data-testid="ad-price">250 €/mês</h3>')]) {
       expect(parseStandvirtualResults(markup).listings[0]?.facts.priceCents).toBeNull();
     }
   });
@@ -80,5 +81,31 @@ describe("Standvirtual search URL boundary", () => {
       "https://www.standvirtual.com/carros-other", "file:///carros"]) {
       expect(() => validateSearchUrl(url)).toThrow();
     }
+  });
+});
+
+describe("rich semantic card evidence", () => {
+  it("retains allowlisted metadata, missing fields and safe thumbnails while skipping malformed cards", () => {
+    const html = readFileSync(new URL("../../../test/fixtures/standvirtual/semantic-results.html", import.meta.url), "utf8");
+    const parsed = parseStandvirtualResults(html, 20, 2026);
+    expect(parsed).toMatchObject({ parserVersion: 2, rejectedCards: 2, duplicateCards: 1 });
+    expect(parsed.listings).toHaveLength(2);
+    expect(parsed.listings[0]).toMatchObject({
+      location: "Lisboa", thumbnailUrl: "https://images.olxcdn.com/vehicle-example.jpg",
+      postedAt: "2026-09-06T00:00:00.000Z", warranty: true, imported: true,
+      facts: { seller: { type: "dealer" }, indicators: { imported: true },
+        original: { description: "Revisão feita. Garantia de 18 meses." } }
+    });
+    expect(parsed.listings[1]).toMatchObject({ location: null, thumbnailUrl: null, postedAt: null,
+      warranty: null, imported: null, facts: { seller: { type: null } } });
+    expect(JSON.stringify(parsed)).not.toMatch(/SANITIZED SELLER|private-profile|tracking|900 000/);
+  });
+
+  it("keeps explicit negative indicators and rejects contact-bearing metadata", () => {
+    const result = parseStandvirtualResults(card("6Negative", `<p data-testid="ad-location">WhatsApp +351 900 000 000</p>
+      <p data-testid="ad-description">mail@example.test</p><span data-parameter="warranty">Sem garantia</span>
+      <span data-parameter="imported">Não</span><img src="https://evil.example/photo.jpg">`)).listings[0];
+    expect(result).toMatchObject({ location: null, thumbnailUrl: null, warranty: false, imported: false,
+      facts: { original: { description: null }, indicators: { imported: false } } });
   });
 });
