@@ -15,6 +15,28 @@ import { SearchDashboard } from "./SearchDashboard.js";
 afterEach(cleanup);
 
 describe("saved-search dashboard interactions", () => {
+  it("creates a broad petrol budget search and reports a partial scan", async () => {
+    const user = userEvent.setup();
+    const create = vi.fn(createClient({}).create);
+    const base = createClient({});
+    const scanStandvirtual = vi.fn(async (id: string) => ({ ...await base.scanStandvirtual(id), partialError: "Request timed out", collected: 3, pagesScanned: 1 }));
+    render(<SearchDashboard client={createClient({ create, scanStandvirtual })} initialSearches={[]} />);
+    await user.click(screen.getByRole("button", { name: "Create a saved search" }));
+    await user.click(screen.getByLabelText("Any vehicle"));
+    expect(screen.queryByLabelText("Make keywords")).toBeNull();
+    await user.type(screen.getByLabelText("Search name"), "Any petrol under 6000");
+    await user.type(screen.getByLabelText("Maximum EUR"), "6000");
+    await user.click(screen.getByLabelText("Petrol"));
+    await user.click(screen.getByRole("button", { name: "Create search" }));
+    await waitFor(() => expect(create).toHaveBeenCalled());
+    expect(create.mock.calls[0]![0]).toMatchObject({ criteria: { searchScope: "broad", makeKeywords: null, priceRange: { value: { maximumEur: 6000 } }, fuels: { value: ["petrol"], strength: "hard" } }, location: { mode: "nationwide" } });
+    expect(screen.getByRole("button", { name: "Verify Facebook" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Scan" }).hasAttribute("disabled")).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Scan Standvirtual" }));
+    await screen.findByText(/Partial Standvirtual scan:/);
+    expect(screen.getByText(/Last completed: Never/)).toBeDefined();
+    expect(screen.getByRole("link", { name: "View Standvirtual listings" }).getAttribute("href")).toContain("searchId=created&source=standvirtual");
+  });
   it("edits scan budgets and requests a deep scan explicitly", async () => {
     const user = userEvent.setup();
     const search = managedSearch("golf", "Golf", 1);
@@ -180,6 +202,8 @@ function createClient(overrides: Partial<SearchApiClient>): SearchApiClient {
       requestedAt: "2026-08-19T12:30:00.000Z"
     }),
     scanStandvirtual: async (id) => ({
+      searchScope: "broad", pricePolicy: "strict", observedAt: "2026-09-07T12:00:00.000Z", partialError: null,
+      observationsInserted: 0, listingsCreated: 0, priceChanges: 0,
       searchId: id, collected: 0, eligible: 0, pagesScanned: 0,
       stopReason: "results_end", scoresCalculated: 0
     }),

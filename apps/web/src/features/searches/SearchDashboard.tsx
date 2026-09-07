@@ -161,7 +161,7 @@ export function SearchDashboard({
     setPending(true);
     setError(null);
     try {
-      if (editor.mode === "create" && editor.form.modelTargets.length > 0) {
+      if (editor.mode === "create" && editor.form.searchScope !== "broad" && editor.form.modelTargets.length > 0) {
         const saved = await client.createModels(modelFormsToDrafts(editor.form), overrideActiveLimit);
         setSearches((current) => sortSearches([...current, ...saved]));
         setEditor(null);
@@ -309,11 +309,21 @@ export function SearchDashboard({
   const scanStandvirtual = async (search: ManagedVehicleSearch): Promise<void> => {
     setPending(true);
     setError(null);
+    setNotice(`Scanning Standvirtual for ${search.name}…`);
     try {
       const report = await client.scanStandvirtual(search.id);
-      setNotice(`Standvirtual collected ${report.collected} market listings for ${search.name}; ${report.eligible} passed your personal filters and ${report.scoresCalculated} were scored.`);
+      setSearches((items) => items.map((item) => item.id === search.id ? { ...item, standvirtualScan: {
+        report, lastAttemptAt: report.observedAt, lastError: report.partialError,
+        lastSuccessAt: report.partialError === null ? report.observedAt : item.standvirtualScan?.lastSuccessAt ?? null
+      } } : item));
+      setNotice(`${report.partialError ? "Partial Standvirtual scan" : "Standvirtual scan completed"}: ${report.collected} collected, ${report.eligible} eligible, ${report.scoresCalculated} scored across ${report.pagesScanned} pages. Stopped: ${report.stopReason.replaceAll("_", " ")}.${report.partialError ? ` ${report.partialError}` : ""}`);
     } catch (scanError: unknown) {
       setError(messageFor(scanError, "The Standvirtual scan could not be completed."));
+      setNotice(null);
+      setSearches((items) => items.map((item) => item.id === search.id ? { ...item, standvirtualScan: {
+        report: null, lastAttemptAt: new Date().toISOString(), lastSuccessAt: item.standvirtualScan?.lastSuccessAt ?? null,
+        lastError: messageFor(scanError, "Scan failed")
+      } } : item));
     } finally {
       setPending(false);
     }
@@ -377,7 +387,7 @@ export function SearchDashboard({
       <div className="search-heading">
         <div>
           <h1 id="searches-title">Saved searches</h1>
-          <p>Watch multiple models with separate queries and filters. All results arrive in one inbox.</p>
+          <p>Watch specific models or browse any vehicle within your budget. All results arrive in one inbox.</p>
         </div>
         <div className="search-create-actions">
         <button className="primary-action" type="button" onClick={() => openCreate(true)} disabled={pending}>
@@ -418,7 +428,7 @@ export function SearchDashboard({
           <div className="empty-orbit" aria-hidden="true"><span /></div>
           <div>
             <h2>Set your first search</h2>
-            <p>Start with a make or model, then decide which rules are strict and which are preferences.</p>
+            <p>Choose a specific model, or select Any vehicle to browse Standvirtual with hard filters such as fuel and budget.</p>
             <button type="button" className="text-action" onClick={() => openCreate(true)}>Create a saved search</button>
           </div>
         </div>
@@ -502,6 +512,8 @@ interface SearchRowProps {
 
 function SearchRow(props: SearchRowProps): ReactElement {
   const { search } = props;
+  const broad = search.criteria.searchScope === "broad";
+  const scan = search.standvirtualScan;
   return (
     <li className={search.active ? "search-row" : "search-row is-paused"}>
       <div className="priority-cell">
@@ -524,9 +536,9 @@ function SearchRow(props: SearchRowProps): ReactElement {
           </span>
         </div>
         <p className="criteria-summary">{summarizeCriteria(search)}</p>
-        <p className="criteria-summary">First scan: {(search.scanLimits ?? DEFAULT_SCAN_LIMITS).initialCardLimit} cards · Stop after {(search.scanLimits ?? DEFAULT_SCAN_LIMITS).knownListingStopCount} consecutive listings already seen in this search · Max {(search.scanLimits ?? DEFAULT_SCAN_LIMITS).maxCards} cards / {(search.scanLimits ?? DEFAULT_SCAN_LIMITS).maxDurationSeconds}s collection</p>
+        {broad ? <p className="criteria-summary">Nationwide · Manual Standvirtual scans · Hard budget applied at collection</p> : <p className="criteria-summary">First scan: {(search.scanLimits ?? DEFAULT_SCAN_LIMITS).initialCardLimit} cards · Stop after {(search.scanLimits ?? DEFAULT_SCAN_LIMITS).knownListingStopCount} consecutive listings already seen in this search · Max {(search.scanLimits ?? DEFAULT_SCAN_LIMITS).maxCards} cards / {(search.scanLimits ?? DEFAULT_SCAN_LIMITS).maxDurationSeconds}s collection</p>}
         <div className="constraint-key" aria-label="Constraint summary">
-          <span>{search.criteria.modelTarget ? "Model target" : "Keyword search"}</span>
+          <span>{broad ? "Broad · Standvirtual only" : search.criteria.modelTarget ? "Model target" : "Keyword search"}</span>
           <span><i className="hard-key" />{countStrength(search, "hard")} hard</span>
           <span><i className="soft-key" />{countStrength(search, "soft")} soft</span>
         </div>
@@ -539,30 +551,40 @@ function SearchRow(props: SearchRowProps): ReactElement {
         </div>
         <div>
           <dt>Source</dt>
-          <dd className={`verification-${search.sourceVerification.state}`}>{formatVerification(search)}</dd>
+          <dd className={`verification-${search.sourceVerification.state}`}>{broad ? "Standvirtual only" : formatVerification(search)}</dd>
         </div>
         <div>
           <dt>Last scan</dt>
-          <dd>{formatScanTime(search.lastScanAt, "Never scanned")}</dd>
+          <dd>{formatScanTime(broad ? scan?.lastSuccessAt ?? null : search.lastScanAt, "Never scanned")}</dd>
         </div>
         <div>
           <dt>Next scan</dt>
-          <dd>{formatScanTime(search.nextScanAt, "Not scheduled")}</dd>
+          <dd>{broad ? "Manual scans" : formatScanTime(search.nextScanAt, "Not scheduled")}</dd>
         </div>
       </dl>
+
+      <div className="standvirtual-status">
+        <strong>Standvirtual · {scan ? scan.report ? scan.report.partialError ? "Partial collection" : "Completed" : "Failed" : "Not scanned"}</strong>
+        {scan ? <>
+          <p>Last attempt: {formatScanTime(scan.lastAttemptAt, "—")} · Last completed: {formatScanTime(scan.lastSuccessAt, "Never")}</p>
+          {scan.report ? <p>{scan.report.collected} collected · {scan.report.eligible} eligible · {scan.report.scoresCalculated} scored · {scan.report.pagesScanned} pages<br />{scan.report.searchScope === "broad" ? "Any vehicle" : "Targeted"} · {scan.report.pricePolicy === "strict" ? "Budget capped" : "Uncapped market evidence"} · Stopped: {scan.report.stopReason.replaceAll("_", " ")}</p> : null}
+          {scan.lastError ? <p className="review-error">{scan.lastError} Retry Scan Standvirtual when ready.</p> : null}
+        </> : null}
+        <a href={`#inbox?searchId=${encodeURIComponent(search.id)}&source=standvirtual`}>View Standvirtual listings</a>
+      </div>
 
       <div className="row-actions">
         <button className="row-action-primary" type="button" onClick={props.onEdit} disabled={props.pending}>
           <Icon name="edit" /> Edit
         </button>
-        <button className="source-action" type="button" onClick={props.onVerify} disabled={props.pending}>
+        <button className="source-action" type="button" onClick={props.onVerify} disabled={props.pending || broad}>
           <Icon name="verify" /> {search.sourceVerification.state === "unverified" ? "Verify Facebook" : "Verify again"}
         </button>
-        <button type="button" onClick={props.onScan} disabled={props.pending || !search.active} title={search.active ? "Request manual scan" : "Activate this search before scanning"}>
+        <button type="button" onClick={props.onScan} disabled={props.pending || !search.active || broad} title={search.active ? "Request manual scan" : "Activate this search before scanning"}>
           <Icon name="scan" /> Scan
         </button>
-        <button type="button" onClick={props.onDeepScan} disabled={props.pending || !search.active} title="Ignore the first-scan cap and known-listing threshold; maximum cards and collection time still apply">Deep scan</button>
-        <button className="standvirtual-action" type="button" onClick={props.onStandvirtual} disabled={props.pending || !search.active || search.criteria.modelTarget == null} title={search.criteria.modelTarget == null ? "Add an explicit model target before scanning Standvirtual" : "Collect up to 100 uncapped market listings; your saved budget is applied only to personal eligibility"}>Scan Standvirtual</button>
+        <button type="button" onClick={props.onDeepScan} disabled={props.pending || !search.active || broad} title="Ignore the first-scan cap and known-listing threshold; maximum cards and collection time still apply">Deep scan</button>
+        <button className="standvirtual-action" type="button" onClick={props.onStandvirtual} disabled={props.pending || !search.active || (!broad && search.criteria.modelTarget == null)} title={broad ? "Collect nationwide listings within your hard budget" : "Collect uncapped market evidence"}>Scan Standvirtual</button>
         <button type="button" onClick={props.onToggle} disabled={props.pending}>
           <Icon name={search.active ? "pause" : "play"} /> {search.active ? "Pause" : "Activate"}
         </button>
@@ -622,7 +644,17 @@ export function SearchEditor({ editor, pending, active, onChange, onClose, onSav
             </label>
           </FormSection>
 
-          {form.modelTargets.length > 0 ? (
+          <FormSection title="Search scope" description="Choose a specific vehicle or browse any vehicle within your filters.">
+            <fieldset className="segmented-field">
+              <legend>Vehicle scope</legend>
+              <label><input type="radio" name="search-scope" checked={form.searchScope === "targeted"} onChange={() => update("searchScope", "targeted")} /><span>Specific vehicle</span></label>
+              <label><input type="radio" name="search-scope" checked={form.searchScope === "broad"} onChange={() => onChange({ ...form, searchScope: "broad", modelTargets: [], locationMode: "nationwide" })} /><span>Any vehicle</span></label>
+            </fieldset>
+            {form.searchScope === "broad" ? <p>Standvirtual only · Nationwide. Add at least one hard filter, such as petrol fuel or a maximum price.</p> : null}
+            <FieldErrors id="scope-error" errors={errorsFor(fieldErrors, "criteria.searchScope", "criteria")} />
+          </FormSection>
+
+          {form.searchScope === "broad" ? null : form.modelTargets.length > 0 ? (
             <FormSection title="Model targets" description="One make and model per target. Shared filters below are copied into each search; edit each independently later.">
               <FieldErrors id="models-error" errors={Object.entries(fieldErrors).filter(([key]) => key.startsWith("models") || key.startsWith("criteria.modelTarget")).flatMap(([key, messages]) => messages.map((message) => `${key.match(/^models\.(\d+)/) ? `Target ${Number(key.split(".")[1]) + 1}: ` : ""}${message}`))} />
               {form.modelTargets.map((target, index) => {
@@ -687,7 +719,7 @@ export function SearchEditor({ editor, pending, active, onChange, onClose, onSav
             <ConstraintTextField id="excluded-keywords" label="Excluded keywords" value={form.excludedKeywords} strength={form.excludedStrength} placeholder="damaged, parts only" onValue={(value) => update("excludedKeywords", value)} onStrength={(value) => update("excludedStrength", value)} errors={errorsFor(fieldErrors, "criteria.excludedKeywords", "criteria.excludedKeywords.value")} />
           </FormSection>
 
-          <FormSection title="Scan limits" description="A new listing for this search resets the known-listing counter. Deep scan skips that counter and the first-scan cap. Changing these limits does not require Facebook verification again.">
+          {form.searchScope === "broad" ? null : <FormSection title="Scan limits" description="A new listing for this search resets the known-listing counter. Deep scan skips that counter and the first-scan cap. Changing these limits does not require Facebook verification again.">
             <FieldErrors id="scan-limits-error" errors={errorsFor(fieldErrors, "scanLimits")} />
             <div className="field-grid two-column">
               <TextField id="initial-card-limit" label="First-scan card limit" value={form.initialCardLimit} onChange={(value) => update("initialCardLimit", value)} errors={errorsFor(fieldErrors, "scanLimits.initialCardLimit")} type="number" min="1" max="10000" />
@@ -696,9 +728,9 @@ export function SearchEditor({ editor, pending, active, onChange, onClose, onSav
               <TextField id="scan-time-limit" label="Collection time budget (seconds)" value={form.maxDurationSeconds} onChange={(value) => update("maxDurationSeconds", value)} errors={errorsFor(fieldErrors, "scanLimits.maxDurationSeconds")} type="number" min="15" max="1800" />
             </div>
             <p className="nationwide-note">Card and time budgets apply to every scan, including deep scans. Time is checked between browser operations; an operation already underway and follow-up processing may finish after the budget. Deep scans start from the top and do not guarantee complete coverage.</p>
-          </FormSection>
+          </FormSection>}
 
-          <FormSection title="Search area" description="Use a radius from one origin, or search across Portugal.">
+          {form.searchScope === "broad" ? null : <FormSection title="Search area" description="Use a radius from one origin, or search across Portugal.">
             <fieldset className="segmented-field">
               <legend>Location mode</legend>
               <label><input type="radio" name="location-mode" value="radius" checked={form.locationMode === "radius"} onChange={() => update("locationMode", "radius")} /><span>Radius</span></label>
@@ -718,7 +750,7 @@ export function SearchEditor({ editor, pending, active, onChange, onClose, onSav
             ) : (
               <p className="nationwide-note">Origin and radius are ignored in nationwide mode.</p>
             )}
-          </FormSection>
+          </FormSection>}
 
           {Object.keys(fieldErrors).length === 0 ? null : (
             <p className="form-error-summary" role="alert">Review the marked fields, then save again.</p>
@@ -898,7 +930,7 @@ function summarizeCriteria(search: ManagedVehicleSearch): string {
   }
   if (criteria.minimumYear !== null) facts.push(`${criteria.minimumYear.value}+`);
   if (criteria.maximumMileageKm !== null) facts.push(`≤ ${formatNumber(criteria.maximumMileageKm.value)} km`);
-  return [identity || "Keyword search", ...facts].join("  /  ");
+  return [criteria.searchScope === "broad" ? "Any vehicle" : identity || "Keyword search", ...(criteria.fuels?.value ?? []), ...facts].join("  /  ");
 }
 
 function formatLocation(search: ManagedVehicleSearch): string {

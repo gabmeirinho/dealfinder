@@ -122,5 +122,27 @@ describe("Standvirtual scanner", () => {
     expect(database.dealScores.get(eligible.id, search.id)?.score.marketValue).toMatchObject({
       status: "available", comparableCount: 6, medianPriceCents: 750_000
     });
+    expect(database.searches.get(search.id)?.standvirtualScan).toMatchObject({
+      lastSuccessAt: "2026-09-05T12:00:00.000Z", report
+    });
+    if (searchScope === "broad") {
+      const partial = new StandvirtualScanner({
+        database: () => database!, scoring: new DealScoringService({ database: () => database! }), duplicates,
+        collect: async (...args) => ({ ...await collect(...args), partialError: "Page request failed" }),
+        now: () => new Date("2026-09-06T12:00:00.000Z")
+      });
+      await partial.scan(search.id);
+      expect(database.searches.get(search.id)?.standvirtualScan).toMatchObject({
+        lastSuccessAt: "2026-09-05T12:00:00.000Z", lastError: "Page request failed", report: { partialError: "Page request failed" }
+      });
+      const failed = new StandvirtualScanner({
+        database: () => database!, scoring: new DealScoringService({ database: () => database! }), duplicates,
+        collect: async () => { throw new Error("Offline"); }, now: () => new Date("2026-09-07T12:00:00.000Z")
+      });
+      await expect(failed.scan(search.id)).rejects.toThrow("Offline");
+      expect(database.searches.get(search.id)?.standvirtualScan).toMatchObject({
+        lastSuccessAt: "2026-09-05T12:00:00.000Z", lastAttemptAt: "2026-09-07T12:00:00.000Z", lastError: "Offline", report: null
+      });
+    }
   });
 });

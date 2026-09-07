@@ -13,6 +13,7 @@ import {
 import { CorrectionsService } from "../corrections/index.js";
 
 export interface ListingInboxFilters {
+  underBudget?: boolean;
   state?: ListingReviewState;
   searchId?: string;
   risk?: boolean;
@@ -36,6 +37,12 @@ export class ListingReviewService {
     const database = this.database();
     const conditions: string[] = [];
     const parameters: Array<string | number> = [];
+    if (filters.underBudget) {
+      const budget = filters.searchId === undefined ? undefined : database.searches.get(filters.searchId)?.criteria.priceRange?.value.maximumEur;
+      if (budget == null) throw new Error("Select a saved search with a maximum price to filter under budget");
+      conditions.push("facts.price_cents IS NOT NULL AND facts.price_cents <= ?");
+      parameters.push(budget * 100);
+    }
     if (filters.state !== undefined) {
       conditions.push("reviews.state = ?");
       parameters.push(filters.state);
@@ -232,6 +239,10 @@ export class ListingReviewService {
       facts: effective,
       risk: database.normalizedVehicles.getRisk(listingId) ?? null,
       matchStatus,
+      broadSearchNames: searchIds.flatMap((id) => {
+        const search = database.searches.get(id);
+        return search?.criteria.searchScope === "broad" ? [search.name] : [];
+      }),
       assessmentSearchName: topScore === null ? null : database.searches.get(topScore.searchId)?.name ?? null,
       score: matchStatus === "matches" ? topScore?.score ?? null : null,
       processing: database.enrichmentProcessing.getQueueItem(listingId) ?? null,

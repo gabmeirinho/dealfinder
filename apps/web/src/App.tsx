@@ -53,7 +53,7 @@ export function App({
   initialView
 }: AppProps = {}): ReactElement {
   const [view, setView] = useState<"searches" | "inbox">(
-    initialView ?? (typeof window !== "undefined" && window.location.hash === "#inbox" ? "inbox" : "searches")
+    initialView ?? (typeof window !== "undefined" && window.location.hash.startsWith("#inbox") ? "inbox" : "searches")
   );
   const [healthState, setHealthState] = useState<HealthState>(
     initialHealth ?? { phase: "loading" }
@@ -76,7 +76,7 @@ export function App({
 
   useEffect(() => {
     if (initialView !== undefined || typeof window === "undefined") return undefined;
-    const updateView = (): void => setView(window.location.hash === "#inbox" ? "inbox" : "searches");
+    const updateView = (): void => setView(window.location.hash.startsWith("#inbox") ? "inbox" : "searches");
     window.addEventListener("hashchange", updateView);
     return () => window.removeEventListener("hashchange", updateView);
   }, [initialView]);

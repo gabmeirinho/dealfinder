@@ -28,7 +28,7 @@ describe("database migrations", () => {
 
     expect(testDatabase.connection.migrationResult).toEqual({
       currentVersion: LATEST_SCHEMA_VERSION,
-      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+      appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
     });
     const migrations = testDatabase.connection.database
       .prepare("SELECT version, name FROM schema_migrations ORDER BY version")
@@ -56,7 +56,8 @@ describe("database migrations", () => {
       { version: 20, name: "incomplete_listing_matches" },
       { version: 21, name: "separate_deal_assessments" },
       { version: 22, name: "scan_limits" },
-      { version: 23, name: "standvirtual_listing_source" }
+      { version: 23, name: "standvirtual_listing_source" },
+      { version: 24, name: "standvirtual_scan_state" }
     ]);
   });
 
@@ -112,7 +113,7 @@ describe("database migrations", () => {
     });
 
     const result = runMigrations(database.database, allMigrations, () => new Date("2026-08-23"));
-    expect(result.appliedVersions).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]);
+    expect(result.appliedVersions).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]);
     const listing = database.database.prepare(`
       SELECT id, discovery_kind FROM listings WHERE source_listing_id = ?
     `).get("100000000000001") as unknown as { id: number; discovery_kind: string };
@@ -156,7 +157,7 @@ describe("database migrations", () => {
     database.enrichmentProcessing.enqueue(listing.id, "2026-08-23T09:00:00.000Z");
 
     expect(runMigrations(database.database, allMigrations, () => new Date("2026-08-23")))
-      .toEqual({ currentVersion: 23, appliedVersions: [15, 16, 17, 18, 19, 20, 21, 22, 23] });
+      .toEqual({ currentVersion: 24, appliedVersions: [15, 16, 17, 18, 19, 20, 21, 22, 23, 24] });
     expect(database.enrichmentProcessing.getQueueItem(listing.id)).toMatchObject({ state: "queued" });
 
     database.database.prepare(`
@@ -188,7 +189,7 @@ describe("database migrations", () => {
       displayedPrice: "45 000 €", priceCents: 4_500_000
     });
 
-    expect(runMigrations(database.database, allMigrations).appliedVersions).toEqual([23]);
+    expect(runMigrations(database.database, allMigrations).appliedVersions).toEqual([23, 24]);
     const standvirtual = database.rawCandidates.saveObservation({
       searchId: search.id,
       observedAt: "2026-09-05T11:00:00.000Z",

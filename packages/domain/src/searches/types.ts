@@ -90,6 +90,7 @@ export interface ValidatedVehicleSearchDraft
 }
 
 export interface VehicleSearch extends ValidatedVehicleSearchDraft {
+  standvirtualScan?: import("./standvirtual.js").StandvirtualScanState | null;
   id: string;
   createdAt: string;
   updatedAt: string;

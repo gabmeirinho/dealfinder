@@ -1,4 +1,5 @@
 export { canonicalMake, canonicalModelTarget, identityKey, modelTargetKey } from "./model-target.js";
+export type { StandvirtualScanReport, StandvirtualScanState } from "./standvirtual.js";
 export {
   DEFAULT_SEARCH_ORIGIN,
   DEFAULT_SEARCH_RADIUS_KM,

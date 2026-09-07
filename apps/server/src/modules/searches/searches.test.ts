@@ -37,6 +37,18 @@ describe("saved-search management API", () => {
     database.close();
   });
 
+  it("saves broad searches but refuses Facebook scan requests", async () => {
+    const draft = createVehicleSearchDraft("Any petrol under 6000");
+    draft.criteria.searchScope = "broad";
+    draft.criteria.fuels = { strength: "hard", value: ["petrol"] };
+    const response = await api("/api/searches", { method: "POST", body: JSON.stringify(draft) });
+    expect(response.status).toBe(201);
+    const { search } = await json(response);
+    const scan = await api(`/api/searches/${search.id}/scan`, { method: "POST" });
+    expect(scan.status).toBe(409);
+    expect((await json(scan)).error.code).toBe("STANDVIRTUAL_ONLY");
+  });
+
   it("validates scan budgets, preserves them on pause, and keeps verification valid", async () => {
     const draft = searchDraft("Configured", 1);
     draft.scanLimits = { initialCardLimit: 500, knownListingStopCount: 100, maxCards: 1500, maxDurationSeconds: 180 };

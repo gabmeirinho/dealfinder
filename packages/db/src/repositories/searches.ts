@@ -9,6 +9,7 @@ import {
 } from "@dealfinder/domain";
 
 interface SearchRow {
+  standvirtual_scan_json: string | null;
   id: string;
   name: string;
   priority: number;
@@ -65,8 +66,7 @@ export class SearchesRepository {
     validateId(id);
     const row = this.database
       .prepare(`
-        SELECT id, name, priority, is_active, criteria_json, scan_limits_json,
-               location_mode, origin, radius_km, created_at, updated_at
+        SELECT *
         FROM searches
         WHERE id = ?
       `)
@@ -78,8 +78,7 @@ export class SearchesRepository {
   public list(): VehicleSearch[] {
     const rows = this.database
       .prepare(`
-        SELECT id, name, priority, is_active, criteria_json, scan_limits_json,
-               location_mode, origin, radius_km, created_at, updated_at
+        SELECT *
         FROM searches
         ORDER BY priority ASC, created_at ASC, id ASC
       `)
@@ -126,6 +125,11 @@ export class SearchesRepository {
     validateId(id);
     return this.database.prepare("DELETE FROM searches WHERE id = ?").run(id).changes > 0;
   }
+
+  public saveStandvirtualScan(id: string, state: import("@dealfinder/domain").StandvirtualScanState): void {
+    this.database.prepare("UPDATE searches SET standvirtual_scan_json = ? WHERE id = ?")
+      .run(JSON.stringify(state), id);
+  }
 }
 
 function mapSearch(row: SearchRow): VehicleSearch {
@@ -151,6 +155,7 @@ function mapSearch(row: SearchRow): VehicleSearch {
 
   return {
     id: row.id,
+    standvirtualScan: row.standvirtual_scan_json == null ? null : JSON.parse(row.standvirtual_scan_json),
     ...validated,
     createdAt: row.created_at,
     updatedAt: row.updated_at

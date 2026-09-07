@@ -22,6 +22,7 @@ import { separateDealAssessmentsMigration } from "./021-separate-deal-assessment
 import { scanLimitsMigration } from "./022-scan-limits.js";
 import { standvirtualListingSourceMigration } from "./023-standvirtual-listing-source.js";
 import type { Migration } from "./types.js";
+import { standvirtualScanStateMigration } from "./024-standvirtual-scan-state.js";
 
 export const allMigrations: readonly Migration[] = [
   createSettingsMigration,
@@ -46,7 +47,8 @@ export const allMigrations: readonly Migration[] = [
   incompleteListingMatchesMigration,
   separateDealAssessmentsMigration,
   scanLimitsMigration,
-  standvirtualListingSourceMigration
+  standvirtualListingSourceMigration,
+  standvirtualScanStateMigration
 ];
 
 export const LATEST_SCHEMA_VERSION =

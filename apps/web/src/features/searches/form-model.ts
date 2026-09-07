@@ -118,6 +118,9 @@ export function draftToSearchForm(
 }
 
 export function searchFormToDraft(form: SearchFormModel): VehicleSearchDraft {
+  if (form.searchScope === "broad") {
+    form = { ...form, modelTargets: [], makeKeywords: "", modelKeywords: "", variantKeywords: "", locationMode: "nationwide" };
+  }
   const minimumPriceEur = numberOrNull(form.minimumPriceEur);
   const maximumPriceEur = numberOrNull(form.maximumPriceEur);
   return {

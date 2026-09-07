@@ -2,6 +2,7 @@ import type {
   ManagedVehicleSearch,
   ScanMode,
   ScanQueueReceipt,
+  StandvirtualScanReport,
   VehicleSearchDraft
 } from "@dealfinder/domain";
 
@@ -41,14 +42,7 @@ export interface SearchApiClient {
   scanStandvirtual(id: string): Promise<StandvirtualScanReport>;
 }
 
-export interface StandvirtualScanReport {
-  searchId: string;
-  collected: number;
-  eligible: number;
-  pagesScanned: number;
-  stopReason: string;
-  scoresCalculated: number;
-}
+export type { StandvirtualScanReport } from "@dealfinder/domain";
 
 export function createSearchApiClient(request: typeof fetch = fetch): SearchApiClient {
   return {

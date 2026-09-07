@@ -105,6 +105,9 @@ export class SearchVerificationService {
     if (search === undefined) {
       throw new SearchVerificationError(404, "SEARCH_NOT_FOUND", "Saved search not found");
     }
+    if (search.criteria.searchScope === "broad") {
+      throw new SearchVerificationError(409, "STANDVIRTUAL_ONLY", "Broad searches use Standvirtual only.");
+    }
     return search;
   }
 

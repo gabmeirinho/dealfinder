@@ -1,27 +1,13 @@
 import type { DatabaseConnection } from "@dealfinder/db";
-import { validateVehicleSearch, type SearchScope } from "@dealfinder/domain";
+import { validateVehicleSearch, type StandvirtualScanReport } from "@dealfinder/domain";
 
 import { ListingIngestionService } from "../../modules/listings/index.js";
 import type { DealScoringService } from "../../modules/scoring/index.js";
 import type { DuplicateDetectionService } from "../../modules/duplicates/index.js";
 import { collectStandvirtualResults } from "./collector.js";
-import { buildStandvirtualSearch, type StandvirtualPricePolicy } from "./search-builder.js";
+import { buildStandvirtualSearch } from "./search-builder.js";
 
-export interface StandvirtualScanReport {
-  searchScope: SearchScope;
-  pricePolicy: StandvirtualPricePolicy;
-  searchId: string;
-  observedAt: string;
-  collected: number;
-  eligible: number;
-  pagesScanned: number;
-  stopReason: string;
-  partialError: string | null;
-  observationsInserted: number;
-  listingsCreated: number;
-  priceChanges: number;
-  scoresCalculated: number;
-}
+export type { StandvirtualScanReport } from "@dealfinder/domain";
 
 export interface StandvirtualScannerOptions {
   database: () => DatabaseConnection;
@@ -51,6 +37,28 @@ export class StandvirtualScanner {
   }
 
   public async scan(searchId: string): Promise<StandvirtualScanReport> {
+    const database = this.#database();
+    const previous = database.searches.get(searchId)?.standvirtualScan;
+    const lastAttemptAt = this.#now().toISOString();
+    try {
+      const report = await this.executeScan(searchId);
+      database.searches.saveStandvirtualScan(searchId, {
+        lastAttemptAt,
+        lastSuccessAt: report.partialError === null ? report.observedAt : previous?.lastSuccessAt ?? null,
+        lastError: report.partialError,
+        report
+      });
+      return report;
+    } catch (error) {
+      database.searches.saveStandvirtualScan(searchId, {
+        lastAttemptAt, lastSuccessAt: previous?.lastSuccessAt ?? null,
+        lastError: error instanceof Error ? error.message : "Scan failed", report: null
+      });
+      throw error;
+    }
+  }
+
+  private async executeScan(searchId: string): Promise<StandvirtualScanReport> {
     const database = this.#database();
     const search = database.searches.get(searchId);
     if (search === undefined) throw new StandvirtualScanError(404, "SEARCH_NOT_FOUND", "Saved search not found");

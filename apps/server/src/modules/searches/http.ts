@@ -193,6 +193,9 @@ export async function handleSearchesRequest(
       const mode = payload.mode ?? "standard";
       if (mode !== "standard" && mode !== "deep") throw invalidRequest([{ path: "mode", message: "must be standard or deep" }]);
       const search = requireSearch(database, id);
+      if (search.criteria.searchScope === "broad") {
+        throw new SearchApiError(409, "STANDVIRTUAL_ONLY", "Broad searches use Scan Standvirtual.");
+      }
       if (!search.active) {
         throw new SearchApiError(
           409,
