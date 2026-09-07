@@ -145,6 +145,28 @@ describe("saved-search dashboard", () => {
     });
   });
 
+  it("round-trips targeted and broad search scope, defaulting legacy searches to targeted", () => {
+    const legacy = managedSearch();
+    expect(draftToSearchForm(legacy).searchScope).toBe("targeted");
+
+    const form = draftToSearchForm(legacy);
+    form.searchScope = "broad";
+    form.fuels = ["petrol"];
+    form.fuelStrength = "hard";
+    form.minimumPriceEur = "";
+    form.maximumPriceEur = "6000";
+
+    const draft = searchFormToDraft(form);
+
+    expect(draft.criteria.searchScope).toBe("broad");
+    expect(draft.criteria.modelTarget).toBeUndefined();
+    expect(draft.criteria.fuels).toEqual({ value: ["petrol"], strength: "hard" });
+    expect(draft.criteria.priceRange).toEqual({
+      value: { minimumEur: null, maximumEur: 6_000 },
+      strength: "hard"
+    });
+  });
+
   it("maps every management operation to the P2C2 API contract", async () => {
     const calls: Array<{ path: string; method: string; body: string }> = [];
     const search = managedSearch();

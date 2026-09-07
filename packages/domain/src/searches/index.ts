@@ -25,6 +25,7 @@ export type {
   SearchLocationInput,
   SearchPriceRange,
   SearchRadiusKm,
+  SearchScope,
   SearchValidationIssue,
   SearchValidationResult,
   SearchSourceVerificationState,

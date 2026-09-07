@@ -59,7 +59,7 @@ export class StandvirtualScanner {
     const petrolOnly = search.criteria.fuels?.strength === "hard" &&
       search.criteria.fuels.value.length === 1 && search.criteria.fuels.value[0] === "petrol";
     const built = buildStandvirtualModelSearch(target.make, target.model, petrolOnly ? { fuel: "petrol" } : {});
-    const collected = await this.#collect(built.url, { limit: 100 });
+    const collected = await this.#collect(built.url, { limit: 800 });
     const observedAt = this.#now().toISOString();
     const initialScan = !database.rawCandidates.hasSourceObservations(searchId, "standvirtual");
     const ingestion = new ListingIngestionService(this.#database).ingestScan({

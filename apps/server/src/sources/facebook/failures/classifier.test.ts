@@ -18,6 +18,22 @@ const cases = [
 ] as const;
 
 describe("Facebook failure classification", () => {
+  it("ignores Facebook's persistent loading marker once listing cards have rendered", () => {
+    const snapshot: MarketplaceResultSnapshot = {
+      cards: ['<a href="/marketplace/item/123">Toyota Yaris 2008 €5,500</a>'],
+      atEnd: false,
+      page: {
+        url: "https://www.facebook.com/marketplace/lisbon/search?query=Toyota%20Yaris",
+        title: "Marketplace",
+        bodyText: "Marketplace results",
+        html: "<html><body><div role=\"progressbar\"></div></body></html>",
+        loading: true
+      }
+    };
+
+    expect(classifyFacebookPage(snapshot, { unchangedSnapshots: 2 })).toBeNull();
+  });
+
   it("does not mistake the captured blank Facebook shell for a source-wide selector failure", () => {
     const snapshot: MarketplaceResultSnapshot = {
       cards: [], atEnd: true,

@@ -5,6 +5,7 @@ export const DEFAULT_SEARCH_RADIUS_KM = 150 as const;
 
 export function createEmptySearchCriteria(): VehicleSearchCriteria {
   return {
+    searchScope: "targeted",
     makeKeywords: null,
     modelKeywords: null,
     variantKeywords: null,

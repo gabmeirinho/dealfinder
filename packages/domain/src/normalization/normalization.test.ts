@@ -79,6 +79,20 @@ describe("vehicle normalization", () => {
     });
   });
 
+  it.each([
+    { title: "Mazda 2 1.3 MZR Comfort", make: "Mazda", model: "2" },
+    { title: "Mitsubishi Colt 1.1 Inform", make: "Mitsubishi", model: "Colt" },
+    { title: "Suzuki Swift 1.2 GL", make: "Suzuki", model: "Swift" }
+  ])("normalizes $make model targets", ({ title, make, model }) => {
+    expect(normalizeVehicleFacts({
+      title,
+      description: null,
+      displayedPrice: "5 000 €",
+      cardFacts: ["Gasolina", "Manual"],
+      referenceYear: 2026
+    })).toMatchObject({ make, model });
+  });
+
   it("matches accented SEAT model names against unaccented hard search keywords", () => {
     const facts = normalizeVehicleFacts({
       title: "Seat León ST FR 1.5 TSI 2020",

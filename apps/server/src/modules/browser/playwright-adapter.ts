@@ -273,12 +273,23 @@ async function submitMarketplaceSearch(page: Page, requestedUrl: string): Promis
     const input = inputs.nth(index);
     const value = await input.inputValue().catch(() => "");
     if (normalizeQuery(value) !== normalizeQuery(expectedQuery)) continue;
-    await input.waitFor({ state: "visible" });
+    // Facebook can render a hidden duplicate of the Marketplace search input.
+    // Skip it instead of waiting for it to become visible and timing out before
+    // the actual visible input later in the DOM can be submitted.
+    if (!await input.isVisible()) continue;
     await page.waitForTimeout(1_500);
     await input.click();
     await input.press("Control+A");
     await input.type(expectedQuery, { delay: 25 });
     await input.press("Enter");
+    // The old result cards remain attached while Facebook changes from the
+    // category route to its search route. Waiting for the URL prevents the
+    // scanner from reading those stale cards (or colliding with navigation).
+    await page.waitForURL((currentUrl) => {
+      const path = currentUrl.pathname.toLocaleLowerCase("en");
+      const query = currentUrl.searchParams.get("query") ?? "";
+      return path.endsWith("/search/") && normalizeQuery(query) === normalizeQuery(expectedQuery);
+    }, { timeout: FACEBOOK_NAVIGATION_TIMEOUT_MS });
     return;
   }
   throw new Error("Facebook did not expose the generated Marketplace search input");

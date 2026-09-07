@@ -1,8 +1,9 @@
 import { parseStandvirtualResults, validateSearchUrl } from "./parser.js";
 
 const MAX_HTML_BYTES = 10 * 1024 * 1024;
-const MAX_PAGES = 10;
+const MAX_PAGES = 15;
 const PAGE_PARSE_LIMIT = 50;
+const MAX_LISTINGS = 800;
 
 export type StandvirtualCollectionStopReason =
   | "listing_limit"
@@ -22,8 +23,8 @@ export async function collectStandvirtualResults(
   options: StandvirtualCollectionOptions = {}
 ) {
   const limit = options.limit ?? 100;
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
-    throw new Error("Limit must be between 1 and 100.");
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LISTINGS) {
+    throw new Error(`Limit must be between 1 and ${MAX_LISTINGS}.`);
   }
   const baseUrl = new URL(validateSearchUrl(inputUrl));
   baseUrl.searchParams.set("search[order]", "created_at_first:desc");

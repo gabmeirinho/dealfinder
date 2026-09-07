@@ -5,6 +5,7 @@ import {
   type FuelType,
   type ManagedVehicleSearch,
   type SearchRadiusKm,
+  type SearchScope,
   type SellerType,
   type TransmissionType,
   type VehicleSearchDraft
@@ -24,6 +25,7 @@ export function emptyModelTarget(): ModelTargetForm {
 }
 
 export interface SearchFormModel {
+  searchScope: SearchScope;
   initialCardLimit: string;
   knownListingStopCount: string;
   maxCards: string;
@@ -75,6 +77,7 @@ export function draftToSearchForm(
   const criteria = search.criteria;
   const limits = search.scanLimits ?? DEFAULT_SCAN_LIMITS;
   return {
+    searchScope: criteria.searchScope ?? "targeted",
     initialCardLimit: String(limits.initialCardLimit),
     knownListingStopCount: String(limits.knownListingStopCount),
     maxCards: String(limits.maxCards),
@@ -123,6 +126,7 @@ export function searchFormToDraft(form: SearchFormModel): VehicleSearchDraft {
     priority: Number(form.priority),
     active: form.active,
     criteria: {
+      searchScope: form.searchScope,
       ...(form.modelTargets.length === 0 ? {} : { modelTarget: { strength: "hard" as const, value: { make: form.modelTargets[0]!.make, model: form.modelTargets[0]!.model, variant: form.modelTargets[0]!.variant || null } } }),
       makeKeywords: form.modelTargets.length ? null : keywordConstraint(form.makeKeywords, form.makeStrength),
       modelKeywords: form.modelTargets.length ? null : keywordConstraint(form.modelKeywords, form.modelStrength),

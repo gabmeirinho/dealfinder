@@ -9,7 +9,7 @@ function card(id: string) {
 }
 
 describe("Standvirtual paginated collector", () => {
-  it("collects newest-first pages up to 100 unique listings", async () => {
+  it("collects newest-first pages up to the requested unique-listing limit", async () => {
     const requested: string[] = [];
     const result = await collectStandvirtualResults("https://www.standvirtual.com/carros/renault/clio", {
       limit: 100,
@@ -61,7 +61,7 @@ describe("Standvirtual paginated collector", () => {
   });
 
   it("rejects invalid limits and does not hide a first-page failure", async () => {
-    await expect(collectStandvirtualResults("https://www.standvirtual.com/carros", { limit: 101 })).rejects.toThrow("100");
+    await expect(collectStandvirtualResults("https://www.standvirtual.com/carros", { limit: 801 })).rejects.toThrow("800");
     await expect(collectStandvirtualResults("https://www.standvirtual.com/carros", {
       fetchHtml: async () => { throw new Error("blocked"); }
     })).rejects.toThrow("blocked");

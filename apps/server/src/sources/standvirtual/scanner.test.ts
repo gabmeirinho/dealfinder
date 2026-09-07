@@ -37,7 +37,7 @@ describe("Standvirtual scanner", () => {
         rejectedCards: 0,
         duplicateCards: 0,
         limitReached: false,
-        requestedLimit: 100,
+        requestedLimit: 800,
         pagesScanned: 1,
         stopReason: "results_end" as const,
         partialError: null,
