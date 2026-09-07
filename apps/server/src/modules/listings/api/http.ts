@@ -57,11 +57,16 @@ export async function handleListingReviewRequest(
       const query = url.searchParams.get("q") ?? undefined;
       const archived = url.searchParams.get("archived") === "true";
       const risk = url.searchParams.get("risk") === "true";
+      const sourceValue = url.searchParams.get("source");
+      if (sourceValue !== null && sourceValue !== "facebook" && sourceValue !== "standvirtual") {
+        throw new Error("Invalid listing source");
+      }
       sendJson(response, 200, {
         listings: workflow.list({
           ...(state === undefined ? {} : { state }),
           ...(searchId === undefined ? {} : { searchId }),
           ...(query === undefined ? {} : { query }),
+          ...(sourceValue === null ? {} : { source: sourceValue }),
           archived,
           sort: sort as "recent" | "market_value" | "personal_fit" | "confidence",
           risk

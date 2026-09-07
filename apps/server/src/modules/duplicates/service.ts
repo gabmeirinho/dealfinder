@@ -4,6 +4,7 @@ import {
   applyFactCorrections,
   createDuplicateTextTokens,
   createVehicleDuplicateFingerprint,
+  enrichmentFromNormalizedFacts,
   groupProbableDuplicates,
   type DuplicateCandidateFingerprint,
   type NormalizedFactField,
@@ -35,25 +36,25 @@ export class DuplicateDetectionService {
     validateTimestamp(computedAt);
     const database = this.#database();
     await this.#thumbnails.cleanupExpired(computedAt);
-    if (database.enrichmentProcessing.getControl().downstreamPaused) {
-      return database.duplicates.listGroups();
-    }
-
+    const enrichments = new Map(database.enrichmentProcessing.listEnrichments()
+      .map((stored) => [stored.listingId, stored]));
     const candidates: DuplicateCandidateFingerprint[] = [];
-    for (const stored of database.enrichmentProcessing.listEnrichments()) {
-      const listing = database.listings.get(stored.listingId);
-      const normalized = database.normalizedVehicles.getFacts(stored.listingId);
-      if (listing === undefined || normalized === undefined) continue;
+    for (const normalized of database.normalizedVehicles.listFacts()) {
+      const listing = database.listings.get(normalized.listingId);
+      if (listing === undefined) continue;
       this.#thumbnails.syncRetention(listing.id, listing.inactiveAt);
 
       const corrections = database.corrections.listForListing(listing.id);
       const facts = applyFactCorrections(normalized.facts, corrections);
-      const enrichment = resolveEnrichment(
-        stored,
-        facts,
-        new Set(corrections.map(({ field }) => field)),
-        database.listingDetailFacts.get(listing.id)?.structuredFacts
-      );
+      const stored = enrichments.get(listing.id);
+      const enrichment = stored !== undefined && stored.sourceNormalizedAt >= normalized.normalizedAt
+        ? resolveEnrichment(
+            stored,
+            facts,
+            new Set(corrections.map(({ field }) => field)),
+            database.listingDetailFacts.get(listing.id)?.structuredFacts
+          )
+        : enrichmentFromNormalizedFacts(facts);
       const textTokens = createDuplicateTextTokens([
         facts.original.title,
         facts.original.description ?? "",
@@ -83,7 +84,17 @@ export class DuplicateDetectionService {
         computedAt
       );
       if (eligibleForAttention) {
-        candidates.push({ listingId: listing.id, textTokens, vehicle, imageDifferenceHash });
+        candidates.push({
+          listingId: listing.id,
+          textTokens,
+          vehicle,
+          imageDifferenceHash,
+          hasDescription: facts.original.description?.trim() !== "" &&
+            facts.original.description != null,
+          priceCents: enrichment.price.interpretation === "full_price"
+            ? enrichment.price.amountCents
+            : null
+        });
       }
     }
     return database.duplicates.replaceGroups(groupProbableDuplicates(candidates), computedAt);

@@ -69,7 +69,7 @@ export function classifyFacebookPage(
   }
   if (
     matches(text, ["something went wrong", "error loading", "alguma coisa correu mal", "erro ao carregar"]) ||
-    (page.loading && context.unchangedSnapshots >= 2)
+    (page.loading && snapshot.cards.length === 0 && context.unchangedSnapshots >= 2)
   ) {
     return failure("partial_load", "search", "Marketplace results did not finish loading");
   }

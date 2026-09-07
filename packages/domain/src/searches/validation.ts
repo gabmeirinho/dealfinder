@@ -6,6 +6,7 @@ import {
   type FuelType,
   type SearchConstraint,
   type SearchRadiusKm,
+  type SearchScope,
   type SearchValidationIssue,
   type SearchValidationResult,
   type SellerType,
@@ -16,6 +17,7 @@ import {
 } from "./types.js";
 
 const STRENGTHS: readonly ConstraintStrength[] = ["hard", "soft"];
+const SEARCH_SCOPES: readonly SearchScope[] = ["targeted", "broad"];
 const FUELS: readonly FuelType[] = [
   "petrol",
   "diesel",
@@ -66,6 +68,7 @@ export function validateVehicleSearch(
   const scanLimits = validateScanLimits(input.scanLimits, issues);
   validateCriteria(input.criteria, issues, currentYear);
   const location = validateLocation(input, issues);
+  const searchScope = input.criteria.searchScope ?? "targeted";
 
   const identifyingCriteria = [
     input.criteria.makeKeywords,
@@ -73,7 +76,7 @@ export function validateVehicleSearch(
     input.criteria.variantKeywords,
     input.criteria.requiredKeywords
   ];
-  if (input.criteria.modelTarget == null && !identifyingCriteria.some((criterion) => criterion !== null && criterion.value.length > 0)) {
+  if (searchScope === "targeted" && input.criteria.modelTarget == null && !identifyingCriteria.some((criterion) => criterion !== null && criterion.value.length > 0)) {
     addIssue(
       issues,
       "criteria",
@@ -121,6 +124,11 @@ function validateCriteria(
   issues: SearchValidationIssue[],
   currentYear: number
 ): void {
+  const searchScope = criteria.searchScope ?? "targeted";
+  if (!SEARCH_SCOPES.includes(searchScope)) {
+    addIssue(issues, "criteria.searchScope", "must be targeted or broad");
+  }
+
   if (criteria.modelTarget != null) {
     const target = criteria.modelTarget;
     if (target.strength !== "hard") addIssue(issues, "criteria.modelTarget", "model targets must be hard requirements");
@@ -176,6 +184,47 @@ function validateCriteria(
       );
     }
   }
+
+  if (searchScope === "broad" && !hasBroadNarrowingFilter(criteria)) {
+    addIssue(
+      issues,
+      "criteria.searchScope",
+      "broad searches require at least one hard narrowing filter: fuel, maximum price, maximum mileage, minimum year, or required keyword"
+    );
+  }
+}
+
+function hasBroadNarrowingFilter(criteria: VehicleSearchCriteria): boolean {
+  return isHardNonEmptySelection(criteria.fuels)
+    || isHardNonEmptySelection(criteria.transmissions)
+    || isHardNonEmptyKeywords(criteria.makeKeywords)
+    || isHardNonEmptyKeywords(criteria.modelKeywords)
+    || isHardNonEmptyKeywords(criteria.variantKeywords)
+    || isHardNonEmptyKeywords(criteria.requiredKeywords)
+    || isHardNumber(criteria.minimumYear)
+    || isHardNumber(criteria.maximumMileageKm)
+    || isHardNumber(criteria.minimumPowerHp)
+    || (criteria.priceRange?.strength === "hard" && (
+      criteria.priceRange.value.minimumEur !== null || criteria.priceRange.value.maximumEur !== null
+    ))
+    || criteria.sellerPreference?.strength === "hard"
+    || criteria.modelTarget?.strength === "hard";
+}
+
+function isHardNonEmptyKeywords(
+  constraint: SearchConstraint<string[]> | null
+): boolean {
+  return constraint?.strength === "hard" && constraint.value.length > 0;
+}
+
+function isHardNonEmptySelection<T>(
+  constraint: SearchConstraint<T[]> | null
+): boolean {
+  return constraint?.strength === "hard" && constraint.value.length > 0;
+}
+
+function isHardNumber(constraint: SearchConstraint<number> | null): boolean {
+  return constraint?.strength === "hard";
 }
 
 function validateLocation(

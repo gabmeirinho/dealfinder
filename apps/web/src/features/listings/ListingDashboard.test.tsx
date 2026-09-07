@@ -12,6 +12,7 @@ afterEach(cleanup);
 const detail: ListingDetail = {
   id: 9,
   title: "<script>alert('x')</script> Volkswagen Golf",
+  source: "facebook",
   sourceUrl: "https://www.facebook.com/marketplace/item/9/",
   displayedPrice: "14 950 €",
   currentPriceCents: 1495000,

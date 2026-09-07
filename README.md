@@ -53,6 +53,119 @@ not count as full snapshots for detecting disappeared listings. Each completed r
 stores its stop reason (`initial_limit`, `known_streak`, `card_limit`, `time_limit`,
 `results_end`, or `no_progress`).
 
+## Standvirtual collection and scoring
+
+The API also accepts saved criteria with `searchScope: "broad"`, for example hard
+petrol fuel and a hard maximum price of €6,000 without make/model identity.
+Broad scans browse nationwide and use the `strict` price policy: the hard maximum
+budget is included in the source URL. Targeted scans use `market_evidence`, which
+omits the source price cap so above-budget vehicles can inform valuation.
+Both paths recheck all saved criteria locally; unsupported source filters remain
+local filters. Collection is bounded and never treated as a complete snapshot.
+The dashboard broad-search editor is a subsequent roadmap phase.
+
+The probe supports the same policies without writing to the database:
+
+```sh
+npm run standvirtual:probe -- --fuel petrol --max-price 6000 --price-policy strict
+npm run standvirtual:probe -- --make VW --model Golf --max-price 6000 --price-policy market_evidence --budget 6000
+```
+
+Probe JSON reports `searchScope`, `pricePolicy`, and applied source `filters`.
+`--budget` only computes local sample eligibility. Custom `--url` input cannot be
+combined with generated filters or a generated market-evidence policy; its query
+metadata is reported as null.
+
+Saved searches with an explicit make/model target can run a Standvirtual scan from
+the search dashboard. Each scan collects up to 100 newest-first listings without a
+source price cap, associates them with the saved search, normalizes and risk-checks
+them, checks duplicates across sources, and recalculates market value, personal fit,
+and confidence. Hard price criteria such as a €6,000 budget control inbox eligibility
+only; above-budget listings remain available as market evidence. Standvirtual scans
+are currently manual, while Facebook continues to use its scheduler.
+
+The same action is available over the local API:
+
+```text
+POST /api/searches/:searchId/standvirtual/scan
+```
+
+The listing inbox can be filtered with `source=standvirtual` or `source=facebook`.
+
+The standalone probe remains useful for parser diagnostics. It exports a JSON report
+with source IDs, canonical links, normalized facts, missing fields, and collection
+diagnostics without writing to the database.
+
+Run a newest-first collection against a public results URL (up to 20 unique
+listings by default, maximum 100 across paginated result pages):
+
+```sh
+npm run standvirtual:probe -- --url 'https://www.standvirtual.com/carros/bmw' --limit 20
+```
+
+To generate an explicit Standvirtual make/model search instead of supplying a
+site URL, pass both values:
+
+```sh
+npm run standvirtual:probe -- --make BMW --model M2 --limit 20
+```
+
+Model searches can currently apply petrol fuel and a maximum EUR price at the
+source:
+
+```sh
+npm run standvirtual:probe -- --make Renault --model Clio --fuel petrol --max-price 6000 --limit 30
+```
+
+For uncapped market evidence, omit `--max-price`, pass the personal budget
+separately, and collect up to 100 listings. The budget is reported as local
+eligibility and is not sent to Standvirtual:
+
+```sh
+npm run standvirtual:probe -- --make Renault --model Clio --fuel petrol --budget 6000 --limit 100
+```
+
+HTTP collection follows result pages until the unique-listing limit, ten-page
+safety limit, two pages without progress, or a request failure. Reports include
+pages scanned, cross-page duplicates, stop reason, and any partial failure.
+
+The JSON report includes the requested model target, generated URL, and the
+Standvirtual filter identifiers used. Model names are converted to site-style
+identifiers, so check the returned listings when trying a model whose public name
+differs from Standvirtual's label.
+
+To try a visible, temporary Chromium session, prepare the results manually and
+press Enter in the terminal to capture the current page:
+
+```sh
+npm run standvirtual:probe -- --browser --url 'https://www.standvirtual.com/carros/bmw'
+```
+
+The browser closes after capture. No Facebook session is used. There is no
+automatic challenge solving, retry loop, pagination, or detail-page fetching.
+Alternatively, save a results page as HTML in your browser and parse it offline:
+
+```sh
+npm run standvirtual:probe -- --html /path/to/results.html
+```
+
+For machine-readable output, use `npm run --silent standvirtual:probe -- ...` and
+redirect stdout to a file outside the repository. Errors go to stderr and exit
+with status 1. Keep raw saved pages outside the repository; the report exports
+selected vehicle fields rather than the full page or seller profile markup.
+
+On 2026-09-05, the Node HTTP probe successfully extracted 20 live listings; 17 had
+price, make/model, year, mileage, fuel, and transmission populated. Three had
+unknown make/model under the shared normalizer. Earlier curl
+and headless Chromium checks returned HTTP 403, so access depends on the client
+and environment; ongoing collection reliability is not confirmed. Parser tests
+use synthetic semantic HTML. The experimental adapter expects article cards with linked headings,
+EUR prices, and vehicle `data-parameter` fields. Unsupported/empty/blocked pages
+fail explicitly; missing individual facts remain unknown. Before integrating
+storage and ranking, test browser access from your machine and compare extracted
+IDs, prices, year, mileage, fuel, and transmission with the visible page. A
+successful parse is evidence for that single page, not reliable ongoing coverage.
+
 ## Requirements
 
 - Node.js 22.5 or newer (for the built-in `node:sqlite` module)

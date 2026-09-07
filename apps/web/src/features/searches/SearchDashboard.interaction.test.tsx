@@ -179,6 +179,10 @@ function createClient(overrides: Partial<SearchApiClient>): SearchApiClient {
       status: "pending",
       requestedAt: "2026-08-19T12:30:00.000Z"
     }),
+    scanStandvirtual: async (id) => ({
+      searchId: id, collected: 0, eligible: 0, pagesScanned: 0,
+      stopReason: "results_end", scoresCalculated: 0
+    }),
     ...overrides
   };
 }

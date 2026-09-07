@@ -57,15 +57,25 @@ export function runMigrations(
 
   for (const migration of migrations) {
     if (appliedVersions.has(migration.version)) continue;
-
-    withTransaction(database, () => {
-      migration.up(database);
-      recordMigration.run(
-        migration.version,
-        migration.name,
-        now().toISOString()
-      );
-    });
+    if (migration.disableForeignKeys === true) database.exec("PRAGMA foreign_keys = OFF");
+    try {
+      withTransaction(database, () => {
+        migration.up(database);
+        recordMigration.run(
+          migration.version,
+          migration.name,
+          now().toISOString()
+        );
+      });
+    } finally {
+      if (migration.disableForeignKeys === true) database.exec("PRAGMA foreign_keys = ON");
+    }
+    if (migration.disableForeignKeys === true) {
+      const violations = database.prepare("PRAGMA foreign_key_check").all();
+      if (violations.length > 0) {
+        throw new Error(`Migration ${migration.version} introduced foreign key violations`);
+      }
+    }
     newlyApplied.push(migration.version);
   }
 

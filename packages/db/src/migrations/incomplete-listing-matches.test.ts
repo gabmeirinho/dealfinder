@@ -48,7 +48,7 @@ describe("incomplete listing migration", () => {
       database.database.prepare("UPDATE processing_queue SET state = 'completed' WHERE listing_id = ?")
         .run(ids[4]!);
 
-      expect(runMigrations(database.database, allMigrations).appliedVersions).toEqual([20, 21, 22]);
+      expect(runMigrations(database.database, allMigrations).appliedVersions).toEqual([20, 21, 22, 23]);
       expect(database.normalizedVehicles.getMatch(ids[0]!, search.id)).toMatchObject({
         status: "needs_information", eligible: false, hardFailures: [], missingCriteria: [unknown]
       });

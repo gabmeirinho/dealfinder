@@ -39,6 +39,7 @@ describe("saved-search dashboard", () => {
     expect(markup).toContain("Not scheduled");
     expect(markup).toContain("Edit");
     expect(markup).toContain("Scan");
+    expect(markup).toContain("Scan Standvirtual");
     expect(markup).toContain("Pause");
     expect(markup).toContain("Duplicate");
     expect(markup).toContain("Delete");
@@ -144,6 +145,28 @@ describe("saved-search dashboard", () => {
     });
   });
 
+  it("round-trips targeted and broad search scope, defaulting legacy searches to targeted", () => {
+    const legacy = managedSearch();
+    expect(draftToSearchForm(legacy).searchScope).toBe("targeted");
+
+    const form = draftToSearchForm(legacy);
+    form.searchScope = "broad";
+    form.fuels = ["petrol"];
+    form.fuelStrength = "hard";
+    form.minimumPriceEur = "";
+    form.maximumPriceEur = "6000";
+
+    const draft = searchFormToDraft(form);
+
+    expect(draft.criteria.searchScope).toBe("broad");
+    expect(draft.criteria.modelTarget).toBeUndefined();
+    expect(draft.criteria.fuels).toEqual({ value: ["petrol"], strength: "hard" });
+    expect(draft.criteria.priceRange).toEqual({
+      value: { minimumEur: null, maximumEur: 6_000 },
+      strength: "hard"
+    });
+  });
+
   it("maps every management operation to the P2C2 API contract", async () => {
     const calls: Array<{ path: string; method: string; body: string }> = [];
     const search = managedSearch();
@@ -174,6 +197,7 @@ describe("saved-search dashboard", () => {
     await client.activate(search.id, true);
     await client.pause(search.id);
     await client.requestScan(search.id);
+    await client.scanStandvirtual(search.id);
     await client.reprioritize([search.id]);
     await client.delete(search.id);
 
@@ -185,6 +209,7 @@ describe("saved-search dashboard", () => {
       `POST /api/searches/${search.id}/activate`,
       `POST /api/searches/${search.id}/pause`,
       `POST /api/searches/${search.id}/scan`,
+      `POST /api/searches/${search.id}/standvirtual/scan`,
       "PUT /api/searches/priorities",
       `DELETE /api/searches/${search.id}`
     ]);

@@ -8,6 +8,7 @@ export const SEARCH_RADIUS_OPTIONS_KM = [25, 50, 100, 150, 250, 500] as const;
 
 export type SearchRadiusKm = (typeof SEARCH_RADIUS_OPTIONS_KM)[number];
 export type ConstraintStrength = "hard" | "soft";
+export type SearchScope = "targeted" | "broad";
 export type FuelType =
   | "petrol"
   | "diesel"
@@ -57,6 +58,8 @@ export interface VehicleModelTarget {
 }
 
 export interface VehicleSearchCriteria {
+  /** Omitted by legacy persisted criteria; absence is interpreted as targeted. */
+  searchScope?: SearchScope;
   modelTarget?: SearchConstraint<VehicleModelTarget> | null;
   makeKeywords: SearchConstraint<string[]> | null;
   modelKeywords: SearchConstraint<string[]> | null;

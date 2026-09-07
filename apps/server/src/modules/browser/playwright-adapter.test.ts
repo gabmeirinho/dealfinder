@@ -77,6 +77,47 @@ describe("Playwright Marketplace navigation", () => {
     expect(locator).toHaveBeenCalledWith(FACEBOOK_MARKETPLACE_ITEM_SELECTOR);
   });
 
+  it("skips Facebook's hidden duplicate search input", async () => {
+    const hiddenInput = {
+      inputValue: vi.fn().mockResolvedValue("Volkswagen Golf"),
+      isVisible: vi.fn().mockResolvedValue(false)
+    };
+    const visibleInput = {
+      inputValue: vi.fn().mockResolvedValue("Volkswagen Golf"),
+      isVisible: vi.fn().mockResolvedValue(true),
+      click: vi.fn().mockResolvedValue(undefined),
+      press: vi.fn().mockResolvedValue(undefined),
+      type: vi.fn().mockResolvedValue(undefined)
+    };
+    const resultWaitFor = vi.fn().mockResolvedValue(undefined);
+    const inputLocator = {
+      count: vi.fn().mockResolvedValue(2),
+      nth: (index: number) => index === 0 ? hiddenInput : visibleInput
+    };
+    const locator = vi.fn((selector: string) => selector === "input"
+      ? inputLocator
+      : { first: () => ({ waitFor: resultWaitFor }) });
+    const page = {
+      goto: vi.fn().mockResolvedValue(null),
+      waitForFunction: vi.fn().mockResolvedValue(undefined),
+      waitForTimeout: vi.fn().mockResolvedValue(undefined),
+      waitForURL: vi.fn().mockResolvedValue(undefined),
+      locator,
+      url: () => "https://www.facebook.com/marketplace/lisbon/vehicles/?query=Volkswagen+Golf"
+    } as unknown as Page;
+
+    await navigateMarketplacePage(
+      page,
+      "https://www.facebook.com/marketplace/lisbon/vehicles/?query=Volkswagen+Golf"
+    );
+
+    expect(hiddenInput.isVisible).toHaveBeenCalledOnce();
+    expect(visibleInput.click).toHaveBeenCalledOnce();
+    expect(visibleInput.press).toHaveBeenNthCalledWith(1, "Control+A");
+    expect(visibleInput.press).toHaveBeenNthCalledWith(2, "Enter");
+    expect(page.waitForURL).toHaveBeenCalledOnce();
+  });
+
   it("preserves a specific error code when Marketplace navigation fails", async () => {
     const page = {
       goto: vi.fn().mockRejectedValue(new Error("navigation timeout"))

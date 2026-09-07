@@ -162,6 +162,12 @@ export class NormalizedVehiclesRepository {
     return row === undefined ? undefined : mapFacts(row);
   }
 
+  public listFacts(): StoredNormalizedVehicle[] {
+    return (this.database.prepare(`
+      SELECT ${FACT_COLUMNS} FROM normalized_vehicle_facts ORDER BY listing_id ASC
+    `).all() as unknown as FactsRow[]).map(mapFacts);
+  }
+
   public saveRisk(
     listingId: number,
     assessment: VehicleRiskAssessment,

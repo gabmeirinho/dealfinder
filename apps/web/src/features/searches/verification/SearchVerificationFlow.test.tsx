@@ -114,6 +114,10 @@ function searchClient(listed: ManagedVehicleSearch): SearchApiClient {
       searchId: listed.id,
       status: "pending",
       requestedAt: "2026-08-20T12:00:00.000Z"
+    }),
+    scanStandvirtual: async () => ({
+      searchId: listed.id, collected: 0, eligible: 0, pagesScanned: 0,
+      stopReason: "results_end", scoresCalculated: 0
     })
   };
 }

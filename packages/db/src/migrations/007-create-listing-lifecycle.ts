@@ -8,7 +8,7 @@ export const createListingLifecycleMigration: Migration = {
       CREATE TABLE listings (
         id INTEGER PRIMARY KEY,
         raw_candidate_id INTEGER NOT NULL UNIQUE REFERENCES raw_candidates(id) ON DELETE RESTRICT,
-        source TEXT NOT NULL CHECK (source IN ('facebook')),
+        source TEXT NOT NULL CHECK (source IN ('facebook', 'standvirtual')),
         source_listing_id TEXT NOT NULL CHECK (length(source_listing_id) BETWEEN 1 AND 100),
         listing_url TEXT NOT NULL CHECK (length(listing_url) BETWEEN 1 AND 4096),
         title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 1000),

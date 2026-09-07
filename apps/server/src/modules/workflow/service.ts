@@ -6,6 +6,7 @@ import type {
 import {
   applyFactCorrections,
   type FactCorrection,
+  type ListingSource,
   type NormalizedVehicleFacts
 } from "@dealfinder/domain";
 
@@ -17,6 +18,7 @@ export interface ListingInboxFilters {
   risk?: boolean;
   archived?: boolean;
   query?: string;
+  source?: ListingSource;
   sort?: "recent" | "market_value" | "personal_fit" | "confidence";
 }
 
@@ -43,6 +45,10 @@ export class ListingReviewService {
     if (filters.searchId !== undefined) {
       conditions.push("EXISTS (SELECT 1 FROM listing_searches ls WHERE ls.listing_id = listings.id AND ls.search_id = ?)");
       parameters.push(filters.searchId);
+    }
+    if (filters.source !== undefined) {
+      conditions.push("listings.source = ?");
+      parameters.push(filters.source);
     }
     if (filters.risk === true) conditions.push("risk.high_risk_verify_price = 1");
     conditions.push("(classification.decision IS NULL OR classification.decision <> 'exclude')");
@@ -124,7 +130,7 @@ export class ListingReviewService {
         ...duplicate,
         members: duplicate.members.map((member) => ({
           ...member,
-          listingUrl: safeFacebookUrl(member.listingUrl)
+          listingUrl: safeListingUrl(member.listingUrl, member.source)
         }))
       },
       notes: database.listingReviews.listNotes(listingId),
@@ -214,7 +220,7 @@ export class ListingReviewService {
       id: listing.id,
       title: plainText(listing.title),
       source: listing.source,
-      sourceUrl: safeFacebookUrl(listing.listingUrl),
+      sourceUrl: safeListingUrl(listing.listingUrl, listing.source),
       displayedPrice: listing.displayedPrice === null ? null : plainText(listing.displayedPrice),
       currentPriceCents: listing.currentPriceCents,
       availability: listing.availability,
@@ -242,11 +248,14 @@ function plainText(value: string): string {
   return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, "").trim();
 }
 
-function safeFacebookUrl(value: string): string | null {
+function safeListingUrl(value: string, source: ListingSource): string | null {
   try {
     const url = new URL(value);
     const host = url.hostname.toLowerCase();
-    return url.protocol === "https:" && (host === "facebook.com" || host.endsWith(".facebook.com"))
+    const safe = source === "facebook"
+      ? host === "facebook.com" || host.endsWith(".facebook.com")
+      : host === "www.standvirtual.com" && /^\/carros\/anuncio\//u.test(url.pathname);
+    return url.protocol === "https:" && safe && !url.username && !url.password
       ? url.toString()
       : null;
   } catch {

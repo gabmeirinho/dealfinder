@@ -8,11 +8,12 @@ import {
   evaluateVehicleMatch,
   normalizeEuroPrice,
   normalizeVehicleFacts,
-  type CoarseSellerSignals
+  type CoarseSellerSignals,
+  type ListingSource
 } from "@dealfinder/domain";
 
 export interface RawListingObservation {
-  source: "facebook";
+  source: ListingSource;
   sourceListingId: string;
   url: string;
   title: string;

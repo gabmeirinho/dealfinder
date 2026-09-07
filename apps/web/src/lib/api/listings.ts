@@ -7,6 +7,7 @@ export type ListingReviewState =
 export interface ListingSummary {
   id: number;
   title: string;
+  source: "facebook" | "standvirtual";
   sourceUrl: string | null;
   displayedPrice: string | null;
   currentPriceCents: number | null;
@@ -93,6 +94,7 @@ export interface ListingFilters {
   risk?: boolean;
   archived?: boolean;
   query?: string;
+  source?: "facebook" | "standvirtual";
 }
 
 export interface ListingApiClient {
@@ -121,6 +123,7 @@ export function createListingApiClient(request: typeof fetch = fetch): ListingAp
       if (filters.risk === true) query.set("risk", "true");
       if (filters.archived === true) query.set("archived", "true");
       if (filters.query !== undefined && filters.query !== "") query.set("q", filters.query);
+      if (filters.source !== undefined) query.set("source", filters.source);
       const body = await send<{ listings: ListingSummary[] }>(request, `/api/listings?${query}`);
       return body.listings;
     },

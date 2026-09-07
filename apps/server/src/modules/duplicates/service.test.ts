@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { openDatabase, type DatabaseConnection } from "@dealfinder/db";
-import { createVehicleSearchDraft, type VehicleEnrichment } from "@dealfinder/domain";
+import { createVehicleSearchDraft } from "@dealfinder/domain";
 
 import { ListingIngestionService } from "../listings/index.js";
 import { DuplicateDetectionService } from "./service.js";
@@ -42,7 +42,7 @@ describe("duplicate detection service", () => {
     expect(groups[0]?.members.map(({ listingId }) => listingId)).toEqual(listingIds.slice(0, 2));
     expect(groups[0]?.members.map(({ listingUrl }) => listingUrl)).toEqual([
       "https://www.facebook.com/marketplace/item/100000000000001/",
-      "https://www.facebook.com/marketplace/item/100000000000002/"
+      "https://www.standvirtual.com/carros/anuncio/bmw-320d-ID100000000000002.html"
     ]);
     expect(groups[0]?.explanation).toContain("no records were merged");
     expect(database.listings.get(listingIds[2]!)).toBeDefined();
@@ -62,9 +62,11 @@ function seedListings(database: DatabaseConnection): number[] {
     initialScan: false,
     completeSnapshot: false,
     candidates: [0, 1, 2].map((index) => ({
-      source: "facebook" as const,
+      source: index === 1 ? "standvirtual" as const : "facebook" as const,
       sourceListingId: String(100000000000001 + index),
-      url: `https://www.facebook.com/marketplace/item/${100000000000001 + index}/`,
+      url: index === 1
+        ? `https://www.standvirtual.com/carros/anuncio/bmw-320d-ID${100000000000001 + index}.html`
+        : `https://www.facebook.com/marketplace/item/${100000000000001 + index}/`,
       title: "BMW 320d 2020",
       description: index < 2 ? detailedDescription : null,
       displayedPrice: "20 000 €",
@@ -74,24 +76,5 @@ function seedListings(database: DatabaseConnection): number[] {
       seller: { type: "private" as const }
     }))
   });
-  while (true) {
-    const claim = database.enrichmentProcessing.claimNext(COMPUTED_AT);
-    if (claim === undefined) break;
-    database.enrichmentProcessing.completeSuccess(claim, enrichment(), COMPUTED_AT, null);
-  }
   return result.listings.map(({ id }) => id);
-}
-
-function enrichment(): VehicleEnrichment {
-  return {
-    schemaVersion: 1,
-    vehicle: {
-      make: "BMW", model: "320d", variant: "M Sport", year: 2020,
-      mileageKm: 80_000, fuel: "diesel", transmission: "automatic", powerHp: 190
-    },
-    price: { amountCents: 2_000_000, interpretation: "full_price" },
-    sellerType: "private",
-    indicators: { financing: false, monthlyPayment: false, deposit: false, damaged: false, imported: false },
-    uncertainties: []
-  };
 }

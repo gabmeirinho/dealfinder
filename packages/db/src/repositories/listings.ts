@@ -11,13 +11,14 @@ import {
   type ListingDiscoveryKind,
   type ListingEngagement,
   type ListingLifecycleState,
-  type SoldReason
+  type SoldReason,
+  type ListingSource
 } from "@dealfinder/domain";
 
 interface ListingRow {
   id: number;
   raw_candidate_id: number;
-  source: "facebook";
+  source: ListingSource;
   source_listing_id: string;
   listing_url: string;
   title: string;
@@ -60,7 +61,7 @@ interface EventRow {
 export interface Listing extends ListingLifecycleState {
   id: number;
   rawCandidateId: number;
-  source: "facebook";
+  source: ListingSource;
   sourceListingId: string;
   listingUrl: string;
   title: string;
@@ -97,7 +98,7 @@ export interface IngestListingObservation {
   searchId: string;
   observedAt: string;
   initialScan: boolean;
-  source: "facebook";
+  source: ListingSource;
   sourceListingId: string;
   listingUrl: string;
   title: string;
@@ -280,7 +281,7 @@ export class ListingsRepository {
     return row === undefined ? undefined : mapListing(row);
   }
 
-  public getBySource(source: "facebook", sourceListingId: string): Listing | undefined {
+  public getBySource(source: ListingSource, sourceListingId: string): Listing | undefined {
     const row = this.database.prepare(`
       SELECT ${LISTING_COLUMNS} FROM listings WHERE source = ? AND source_listing_id = ?
     `).get(source, sourceListingId) as unknown as ListingRow | undefined;

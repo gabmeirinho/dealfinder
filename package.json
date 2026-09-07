@@ -16,6 +16,7 @@
   "scripts": {
     "build": "npm run build --workspace @dealfinder/domain && npm run build --workspace @dealfinder/db && npm run build --workspace @dealfinder/server && npm run build --workspace @dealfinder/web",
     "browser:install": "playwright install chromium",
+    "standvirtual:probe": "npm run build --workspace @dealfinder/domain --silent && npm run build --workspace @dealfinder/db --silent && npm run build --workspace @dealfinder/server --silent && node apps/server/dist/sources/standvirtual/probe.js",
     "dev": "npm run build && concurrently --kill-others --names api,web \"node apps/server/dist/main.js\" \"npm run dev --workspace @dealfinder/web\"",
     "fixtures:check": "node scripts/check-facebook-fixtures.mjs",
     "fixtures:sanitize": "node scripts/sanitize-facebook-fixture.mjs",

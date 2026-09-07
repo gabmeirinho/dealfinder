@@ -7,7 +7,7 @@ export const createRawCandidatesMigration: Migration = {
     database.exec(`
       CREATE TABLE raw_candidates (
         id INTEGER PRIMARY KEY,
-        source TEXT NOT NULL CHECK (source IN ('facebook')),
+        source TEXT NOT NULL CHECK (source IN ('facebook', 'standvirtual')),
         source_listing_id TEXT NOT NULL CHECK (length(source_listing_id) BETWEEN 1 AND 100),
         listing_url TEXT NOT NULL CHECK (length(listing_url) BETWEEN 1 AND 4096),
         first_seen_at TEXT NOT NULL,

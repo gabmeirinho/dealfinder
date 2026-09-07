@@ -175,6 +175,36 @@ describe("deal scoring service", () => {
     expect(new DealScoringService({ database: () => setup.database }).recomputeAll(SCORED_AT)).toHaveLength(1);
     expect(database.dealScores.listRanked(setup.searchId)).toHaveLength(1);
   });
+
+  it("scores normalized listings before optional AI enrichment completes", () => {
+    database = openDatabase({ filename: ":memory:" });
+    const draft = createVehicleSearchDraft("BMW 320d market");
+    draft.criteria.modelTarget = { strength: "hard", value: { make: "BMW", model: "320d", variant: null } };
+    const search = database.searches.create(draft);
+    const result = new ListingIngestionService(() => database as DatabaseConnection).ingestScan({
+      searchId: search.id,
+      observedAt: SCORED_AT,
+      initialScan: true,
+      completeSnapshot: false,
+      candidates: [{
+        source: "standvirtual", sourceListingId: "SV-NORMALIZED",
+        url: "https://www.standvirtual.com/carros/anuncio/bmw-320d-IDSVNORMALIZED.html",
+        title: "BMW 320d 2020", description: "80 000 km, diesel, automática",
+        displayedPrice: "20 000 €", location: null, thumbnailUrl: null,
+        rawCardFacts: ["80 000 km", "Diesel", "Automática"]
+      }]
+    });
+
+    expect(database.enrichmentProcessing.getEnrichment(result.listings[0]!.id)).toBeUndefined();
+    const scores = new DealScoringService({ database: () => database as DatabaseConnection })
+      .recomputeAll(SCORED_AT);
+
+    expect(scores).toHaveLength(1);
+    expect(scores[0]?.score).toMatchObject({
+      marketValue: { status: "insufficient_data" },
+      confidence: { level: "low" }
+    });
+  });
 });
 
 function seed(pricesEur: number[], nationwide = false, fuel?: FuelType) {
